@@ -23,6 +23,7 @@ cd /tmp/coder-gateway-demo && opencode
 - [TESTING.md](TESTING.md): stap voor stap handmatig testen, met de drie scenario's.
 - [docs/e2e-opencode.md](docs/e2e-opencode.md): end-to-end test met opencode en wat we live zagen.
 - [docs/DECISIONS.md](docs/DECISIONS.md): gemaakte keuzes en waarom.
+- [docs/reviews/](docs/reviews/): twee Codex-reviews met per bevinding de opvolging.
 - [benchmark/README.md](benchmark/README.md): de benchmark van de Decider (`uv run benchmark`).
 - [skills/gateway-status/SKILL.md](skills/gateway-status/SKILL.md): opencode-skill die de status
   toont via de read-API.

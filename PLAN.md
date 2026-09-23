@@ -30,13 +30,13 @@ workflow. Drie ingrepen: flag, injectie, blokkade.
    groen zijn gemeld → gateway weigert, stuurt uitleg terug als assistant-antwoord.
 
 ## Todo
-- [ ] Benchmarkscript: strategieën voor Jev-state vergelijken op fixtures met ground truth
+- [x] Benchmarkscript: strategieën voor Jev-state vergelijken op fixtures met ground truth — `uv run benchmark`, zie `benchmark/README.md`
 - [x] End-to-end test met opencode als client (provider-config, scenario voor propose/flag/block) — zie `docs/e2e-opencode.md`
-- [ ] Configuratieformaat van workflow-definitie uitwerken (fases, regels, ingreep per regel)
+- [x] Configuratieformaat van workflow-definitie uitwerken (fases, regels, ingreep per regel) — `workflows/fwd-default.yaml`
 - [x] Techstack: Python + uv, FastAPI, streaming (SSE). Upstream OpenAI. Jev via typesafe-sdk.
-- [ ] Jev toetsen (key is er): classificeert het transcript betrouwbaar naar {none, propose_issue, flag_no_spec, block_pr}?
-- [ ] Fallback als Jev niet beschikbaar is: klein LLM met structured output (zelfde enum)
-- [ ] Fingerprint-functie voor conversatie-identificatie
+- [x] Jev toetsen (key is er): classificeert het transcript betrouwbaar naar {none, propose_issue, flag_no_spec, block_pr}? — ja/nee-vraag per regel (DECISIONS #6); benchmark ~94% bij strategie `full`
+- [x] Fallback als Jev niet beschikbaar is: klein LLM met structured output (zelfde enum) — `deciders/llm.py`, gpt-5.4-mini
+- [x] Fingerprint-functie voor conversatie-identificatie — `fingerprint.py`; opencode stuurt wel `x-session-id` (DECISIONS #1)
 - [x] Skill voor coding agent die de read-API bevraagt — `skills/gateway-status/`
 
 ## Benchmark: wat krijgt Jev als state?
