@@ -1,0 +1,61 @@
+{
+  "name": "dutch_developer_no_issue",
+  "description": "Dutch-language conversation, developer asks to fix a bug with no issue/ticket ever referenced and no spec discussed. Both propose_issue and flag_no_spec should fire.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Kun je de bug in het betaalproces oplossen? Bij een dubbele klik wordt de betaling twee keer verstuurd."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/payment.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "1: def submit(self):\n2:     self.api.charge(self.amount)\n"
+    },
+    {
+      "role": "user",
+      "content": "Ja, voeg een guard toe zodat dat niet meer kan."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/payment.py\", \"oldString\": \"def submit(self):\", \"newString\": \"def submit(self):\\n    if self._submitted:\\n        return\\n    self._submitted = True\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "Edit applied successfully."
+    }
+  ],
+  "expected": {
+    "propose_issue": true,
+    "flag_no_spec": true,
+    "block_pr_without_tests": false
+  }
+}

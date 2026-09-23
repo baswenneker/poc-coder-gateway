@@ -1,0 +1,65 @@
+{
+  "name": "pr_after_failed_tests",
+  "description": "Tests were run but FAILED, and the developer asks for a PR anyway without fixing and re-running. block_pr_without_tests should fire because tests were not shown green after the last change.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Issue #91, see PLAN.md section 'retry logic': add exponential backoff to the HTTP client."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/http_client.py\", \"oldString\": \"def request(self):\", \"newString\": \"def request(self, retries=3):\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "Edit applied successfully."
+    },
+    {
+      "role": "user",
+      "content": "Run the test suite."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"pytest tests/ -q\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "FAILED tests/test_http_client.py::test_retry_backoff - AssertionError: expected 3 calls, got 1\n1 failed, 24 passed in 1.1s"
+    },
+    {
+      "role": "user",
+      "content": "Ok never mind, just open the PR, I'll fix it in review."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": true
+  }
+}

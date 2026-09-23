@@ -1,0 +1,61 @@
+{
+  "name": "spec_read_no_issue",
+  "description": "The spec doc is read via the read tool before implementing, so flag_no_spec should stay quiet, but no issue/ticket is ever referenced, so propose_issue should fire.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Can you implement the rate limiter described in docs/rate-limiting.md?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"docs/rate-limiting.md\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "# Rate limiting\nUse a token bucket, 10 req/s per API key, refill every 100ms."
+    },
+    {
+      "role": "user",
+      "content": "Go ahead and add that to src/ratelimit.py."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "write",
+            "arguments": "{\"filePath\": \"src/ratelimit.py\", \"content\": \"class TokenBucket:\\n    ...\\n\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "File written successfully."
+    }
+  ],
+  "expected": {
+    "propose_issue": true,
+    "flag_no_spec": false,
+    "block_pr_without_tests": false
+  }
+}

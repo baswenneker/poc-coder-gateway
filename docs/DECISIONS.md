@@ -48,3 +48,26 @@ De Decision valt vóór de request upstream gaat. Een Block vangt dus het verzoe
 ("maak een PR") of een eerdere `gh pr create`-poging in de Transcript. Een `gh pr create` die het
 model zelf in zijn antwoord bedenkt, ziet de Gateway pas bij de volgende request. Het uitvoeren van
 die tool call gebeurt dan al in de client. Beperking van de POC.
+
+## 8. Benchmark bouwt de Decider via `build_decider(fallback="none")`, niet rechtstreeks
+`src/coder_gateway/benchmark.py` moet Jev/LLM "kaal" meten, zonder terugval die fouten verbergt.
+In plaats van `JevDecider`/`LLMDecider` rechtstreeks te importeren en te construeren (met interne
+constructor-argumenten die bij de Deciders horen, niet bij de benchmark), roept de benchmark de
+bestaande `build_decider(primary=..., fallback="none", ...)` aan. Dat is al de ene centrale plek
+waar een naam naar een Decider wordt vertaald; `fallback="none"` levert dezelfde "geen terugval"-
+garantie als rechtstreeks bouwen, zonder dat de benchmark de constructor-signatuur van elke Decider
+hoeft te kennen. Nieuwe strategieën/Deciders (bijv. `summary_last_10`) blijven zo op één plek toevoegen.
+
+## 9. Ground truth in fixtures is altijd over de volle conversatie, per strategie wordt alleen de
+Transcript verkleind
+`benchmark/fixtures/*.json` heeft één `expected` per fixture, niet één per strategie. Dat is
+expres: `expected` is de juiste Decision zoals de Gateway die zou geven als hij het hele gesprek
+zag. Een strategie als `last_10` mag daar juist slechter op scoren dan `full` — dat verschil in
+accuracy per strategie, niet een aangepaste ground truth, is wat de tabel moet laten zien (zie
+`long_conversation_early_issue_lost` en `long_conversation_early_spec_lost`).
+
+## 10. Fouten van de Decider zelf tellen als "error", los van accuracy
+Als `decider.decide()` een exception gooit of een `Decision` met `error` teruggeeft, telt de
+benchmark dat als `errors`, apart van de accuracy-teller (die alleen over geslaagde calls gaat).
+Een kapotte call zou anders de accuracy kunstmatig verlagen en het verschil tussen "Decider gaf het
+verkeerde antwoord" en "Decider gaf helemaal geen antwoord" verdoezelen.

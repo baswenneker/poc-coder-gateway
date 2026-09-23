@@ -1,0 +1,61 @@
+{
+  "name": "gh_pr_create_in_bash",
+  "description": "The 'gh pr create' invocation appears inside a bash tool call rather than in the developer's words, with no test run anywhere in the conversation. block_pr_without_tests should still fire.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Issue #200, see PLAN.md 'logging': switch the logger to structured JSON output."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/logging_setup.py\", \"oldString\": \"format='%(message)s'\", \"newString\": \"format='%(message)s', json=True\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "Edit applied successfully."
+    },
+    {
+      "role": "user",
+      "content": "Looks fine, go ahead and ship it."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"git add -A && git commit -m 'structured logging' && gh pr create --title 'Structured JSON logging' --body 'Closes #200'\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "[main abc1234] structured logging\n 1 file changed, 1 insertion(+), 1 deletion(-)\nCreating pull request..."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": true
+  }
+}

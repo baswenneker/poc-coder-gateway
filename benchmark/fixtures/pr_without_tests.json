@@ -1,0 +1,42 @@
+{
+  "name": "pr_without_tests",
+  "description": "Issue and spec are both fine, but the developer asks for a PR without any test run being shown in the conversation at all. block_pr_without_tests should fire.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Issue #77: typo in the README install section. I checked PLAN.md, this is a trivial docs fix."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"README.md\", \"oldString\": \"pip instal\", \"newString\": \"pip install\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "Edit applied successfully."
+    },
+    {
+      "role": "user",
+      "content": "Looks good, open a PR for this."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": true
+  }
+}

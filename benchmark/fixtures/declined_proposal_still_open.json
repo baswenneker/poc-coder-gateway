@@ -1,0 +1,80 @@
+{
+  "name": "declined_proposal_still_open",
+  "description": "The developer already declined the propose_issue Proposal earlier in the conversation (via the question tool) and coding continued regardless. No issue was ever referenced and no spec discussed, so propose_issue and flag_no_spec should still both fire — a declined Proposal doesn't clear the underlying Rule.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Please add input validation to the signup form, email must be a valid address."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "question",
+            "arguments": "{\"questions\": [{\"question\": \"Er is nog geen issue genoemd voor dit werk. Zullen we eerst een issue aanmaken?\", \"header\": \"Eerst een issue?\"}]}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "{\"answers\": [\"Nee, ga door\"]}"
+    },
+    {
+      "role": "assistant",
+      "content": "Ok, I'll continue without an issue."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/signup.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "1: def validate(form):\n2:     return True\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_3",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/signup.py\", \"oldString\": \"return True\", \"newString\": \"return EMAIL_RE.match(form['email']) is not None\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_3",
+      "content": "Edit applied successfully."
+    }
+  ],
+  "expected": {
+    "propose_issue": true,
+    "flag_no_spec": true,
+    "block_pr_without_tests": false
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "no_issue_coding_starts",
+  "description": "Developer jumps straight to a code fix, no issue/ticket referenced anywhere, and no spec file is discussed either. Both propose_issue and flag_no_spec should fire; no PR requested yet.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "The auth middleware throws a 500 when the token header is missing. Please fix it in auth.py."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/auth.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "1: def middleware(request):\n2:     token = request.headers['Authorization']\n..."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/auth.py\", \"oldString\": \"token = request.headers['Authorization']\", \"newString\": \"token = request.headers.get('Authorization')\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "Edit applied successfully."
+    }
+  ],
+  "expected": {
+    "propose_issue": true,
+    "flag_no_spec": true,
+    "block_pr_without_tests": false
+  }
+}

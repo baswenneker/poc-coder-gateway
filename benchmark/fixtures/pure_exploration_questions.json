@@ -1,0 +1,65 @@
+{
+  "name": "pure_exploration_questions",
+  "description": "Pure read-only exploration and questions, no code changes requested and no PR. None of the rules should fire.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "How does the retry logic in http_client.py work?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/http_client.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "1: class HttpClient:\n2:     def request(self, retries=3):\n..."
+    },
+    {
+      "role": "assistant",
+      "content": "It retries up to 3 times with no backoff currently, just a plain loop."
+    },
+    {
+      "role": "user",
+      "content": "And where is it instantiated?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "grep",
+            "arguments": "{\"pattern\": \"HttpClient(\", \"path\": \"src\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "src/api.py:14: client = HttpClient()"
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": false
+  }
+}

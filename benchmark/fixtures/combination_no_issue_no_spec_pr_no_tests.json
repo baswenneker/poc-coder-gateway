@@ -1,0 +1,61 @@
+{
+  "name": "combination_no_issue_no_spec_pr_no_tests",
+  "description": "Worst case: no issue referenced, no spec discussed, and a PR is requested without any test run. All three rules should fire.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Quick one: the /health endpoint returns 200 even when the DB is down. Fix that and ship it."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/health.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "1: def health(request):\n2:     return JsonResponse({'status': 'ok'})\n"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/health.py\", \"oldString\": \"return JsonResponse({'status': 'ok'})\", \"newString\": \"status = 'ok' if db.ping() else 'error'\\n    return JsonResponse({'status': status}, status=200 if status == 'ok' else 503)\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "Edit applied successfully."
+    },
+    {
+      "role": "user",
+      "content": "Perfect, open a PR for this."
+    }
+  ],
+  "expected": {
+    "propose_issue": true,
+    "flag_no_spec": true,
+    "block_pr_without_tests": true
+  }
+}

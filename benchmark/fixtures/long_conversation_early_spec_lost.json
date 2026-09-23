@@ -1,0 +1,254 @@
+{
+  "name": "long_conversation_early_spec_lost",
+  "description": "A 27+ message conversation where docs/caching-spec.md is read once near the start, followed by many file-exploration turns and further edits far later. Ground truth over the full transcript is flag_no_spec=false (the spec WAS read); a 'last_10' strategy would lose that early read and likely misjudge this one.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Can you implement the caching layer described in docs/caching-spec.md?"
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"docs/caching-spec.md\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "# Caching spec\nUse an LRU cache, max 500 entries, TTL 60s, keyed by request path + query string."
+    },
+    {
+      "role": "assistant",
+      "content": "Understood: LRU, 500 entries, 60s TTL, keyed by path+query."
+    },
+    {
+      "role": "user",
+      "content": "Also make sure it's covered by issue #64."
+    },
+    {
+      "role": "user",
+      "content": "Show me src/cache/store.py first."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/cache/store.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "1: # src/cache/store.py\n2: ...\n(contents omitted, 30 lines)"
+    },
+    {
+      "role": "assistant",
+      "content": "src/cache/store.py is currently a stub, nothing implemented yet."
+    },
+    {
+      "role": "user",
+      "content": "Show me src/cache/keys.py first."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_3",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/cache/keys.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_3",
+      "content": "1: # src/cache/keys.py\n2: ...\n(contents omitted, 31 lines)"
+    },
+    {
+      "role": "assistant",
+      "content": "src/cache/keys.py is currently a stub, nothing implemented yet."
+    },
+    {
+      "role": "user",
+      "content": "Show me src/cache/config.py first."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_4",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/cache/config.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_4",
+      "content": "1: # src/cache/config.py\n2: ...\n(contents omitted, 32 lines)"
+    },
+    {
+      "role": "assistant",
+      "content": "src/cache/config.py is currently a stub, nothing implemented yet."
+    },
+    {
+      "role": "user",
+      "content": "Show me src/cache/metrics.py first."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_5",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/cache/metrics.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_5",
+      "content": "1: # src/cache/metrics.py\n2: ...\n(contents omitted, 33 lines)"
+    },
+    {
+      "role": "assistant",
+      "content": "src/cache/metrics.py is currently a stub, nothing implemented yet."
+    },
+    {
+      "role": "user",
+      "content": "Show me src/cache/eviction.py first."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_6",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/cache/eviction.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_6",
+      "content": "1: # src/cache/eviction.py\n2: ...\n(contents omitted, 34 lines)"
+    },
+    {
+      "role": "assistant",
+      "content": "src/cache/eviction.py is currently a stub, nothing implemented yet."
+    },
+    {
+      "role": "user",
+      "content": "Show me src/cache/serializer.py first."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_7",
+          "type": "function",
+          "function": {
+            "name": "read",
+            "arguments": "{\"filePath\": \"src/cache/serializer.py\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_7",
+      "content": "1: # src/cache/serializer.py\n2: ...\n(contents omitted, 35 lines)"
+    },
+    {
+      "role": "assistant",
+      "content": "src/cache/serializer.py is currently a stub, nothing implemented yet."
+    },
+    {
+      "role": "user",
+      "content": "Ok, implement the LRU store first in src/cache/store.py."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_8",
+          "type": "function",
+          "function": {
+            "name": "write",
+            "arguments": "{\"filePath\": \"src/cache/store.py\", \"content\": \"class LRUCache:\\n    def __init__(self, max_entries=500, ttl=60):\\n        ...\\n\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_8",
+      "content": "File written successfully."
+    },
+    {
+      "role": "user",
+      "content": "Now wire the key builder to use path + query string."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_9",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/cache/keys.py\", \"oldString\": \"def build_key(path):\", \"newString\": \"def build_key(path, query):\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_9",
+      "content": "Edit applied successfully."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": false
+  }
+}

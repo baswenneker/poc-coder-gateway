@@ -1,0 +1,65 @@
+{
+  "name": "tests_passed_after_last_edit_pr",
+  "description": "Tests are run and pass right after the last code edit, then a PR is requested. This is the correct order, so block_pr_without_tests should stay quiet.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Issue #12, per SPEC.md 'error formatting': normalize error messages to lowercase and strip whitespace."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/errors.py\", \"oldString\": \"return msg\", \"newString\": \"return msg.strip().lower()\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_1",
+      "content": "Edit applied successfully."
+    },
+    {
+      "role": "user",
+      "content": "Run the tests."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_2",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"pytest tests/test_errors.py -q\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2",
+      "content": "5 passed in 0.2s"
+    },
+    {
+      "role": "user",
+      "content": "Good, please open a PR."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": false
+  }
+}
