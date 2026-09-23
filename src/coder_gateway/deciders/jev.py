@@ -18,9 +18,7 @@ from coder_gateway.transcript import compact_transcript
 class SystemOneClient(Protocol):
     """The slice of `typesafe_sdk.AsyncTypeSafeClient` JevDecider needs. Lets tests use a fake."""
 
-    async def system_one(
-        self, state: Any, questions: dict[str, Any], *, model: str | None = None
-    ) -> Any: ...
+    async def system_one(self, state: Any, questions: dict[str, Any], *, model: str | None = None) -> Any: ...
 
 
 def _rule_question(rule: Rule) -> Noul:
@@ -47,8 +45,7 @@ def build_state(inp: DecisionInput) -> dict[str, Any]:
         "transcript": compact_transcript(inp.transcript),
         "gateway_state": inp.state,
         "workflow": {
-            rule.id: {"description": rule.description, "ok_when": rule.ok_when}
-            for rule in inp.workflow.rules
+            rule.id: {"description": rule.description, "ok_when": rule.ok_when} for rule in inp.workflow.rules
         },
     }
 

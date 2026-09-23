@@ -68,8 +68,14 @@ async def test_none_decider_reports_nothing_broken() -> None:
 
 
 class _StubDecider:
-    def __init__(self, name: str, *, decision: Decision | None = None, error: Exception | None = None,
-                 delay: float = 0.0) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        decision: Decision | None = None,
+        error: Exception | None = None,
+        delay: float = 0.0,
+    ) -> None:
         self.name = name
         self._decision = decision
         self._error = error
@@ -187,8 +193,9 @@ class _FakeUsage:
 
 
 class _FakeSystemOneResponse:
-    def __init__(self, nouls: dict[str, float], choices: dict[str, str] | None = None,
-                 model: str = "jev-latest") -> None:
+    def __init__(
+        self, nouls: dict[str, float], choices: dict[str, str] | None = None, model: str = "jev-latest"
+    ) -> None:
         self.nouls = {k: _FakeNoulAnswer(v) for k, v in nouls.items()}
         self.choices = {k: _FakeChoiceAnswer(v) for k, v in (choices or {}).items()}
         self.usage = _FakeUsage(120, 12)

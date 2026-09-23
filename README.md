@@ -33,4 +33,5 @@ cd /tmp/coder-gateway-demo && opencode
 uv run pytest -q
 uv run mypy
 uv run ruff check src tests
+uv run ruff format --check src tests
 ```

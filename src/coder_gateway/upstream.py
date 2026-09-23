@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 from fastapi import Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.types import Receive, Scope, Send
 
 from coder_gateway.config import UpstreamConfig
 from coder_gateway.domain import VirtualModel
@@ -83,19 +84,35 @@ class Upstream:
                 media_type=resp.headers.get("content-type", "application/json"),
             )
 
-        async def relay() -> AsyncIterator[bytes]:
-            try:
-                async for chunk in resp.aiter_bytes():
-                    yield chunk
-            finally:
-                await resp.aclose()
+        return _UpstreamStream(resp)
 
-        return StreamingResponse(
-            relay(),
+
+class _UpstreamStream(StreamingResponse):
+    """Relays an upstream SSE stream and closes it over the whole response lifecycle: also when the
+    client is gone before the first chunk (sending `http.response.start` fails, so the relay never
+    starts) or the request is cancelled. `httpx.Response.aclose` is idempotent."""
+
+    def __init__(self, upstream: httpx.Response) -> None:
+        self._upstream = upstream
+        super().__init__(
+            self._relay(),
             status_code=200,
             media_type="text/event-stream",
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
         )
+
+    async def _relay(self) -> AsyncIterator[bytes]:
+        try:
+            async for chunk in self._upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await self._upstream.aclose()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await self._upstream.aclose()
 
 
 def _rename_model(content: bytes, name: str) -> bytes:

@@ -6,7 +6,9 @@ respect to other requests. Every event is also appended to a JSON-lines file whe
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
 from collections import deque
 from dataclasses import asdict, dataclass, field
@@ -24,6 +26,8 @@ from coder_gateway.domain import (
     WorkflowDefinition,
 )
 from coder_gateway.fingerprint import content_text, store_key, user_messages
+
+log = logging.getLogger("coder_gateway.store")
 
 MAX_EVENTS = 200
 
@@ -147,6 +151,9 @@ class Conversation:
     updated_at: str = field(default_factory=_now)
     turn: int = 0
     requests: int = 0
+    # The latest Developer message seen: user-message count and a hash of its text (Turn detection).
+    user_count: int = 0
+    last_user_hash: str = ""
     phase: str | None = None
     flags: dict[str, ActiveFlag] = field(default_factory=dict)
     proposals: list[ProposalRecord] = field(default_factory=list)
@@ -197,6 +204,7 @@ class ConversationStore:
         self._conversations: dict[str, Conversation] = {}
         self._events_path = events_path
         self._max_events = max_events
+        self._write_failing = False
         if events_path is not None:
             events_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -241,18 +249,36 @@ class ConversationStore:
         conv.events.append(event)
         conv.updated_at = event["ts"]
         if self._events_path is not None:
-            with open(self._events_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+            self._append(self._events_path, event)
         return event
+
+    def _append(self, path: Path, event: dict[str, Any]) -> None:
+        """Best effort (DECISIONS.md #26): a failing events file is logged once until it works again,
+        and never breaks the request."""
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event, ensure_ascii=False, default=str) + "\n")
+        except OSError as exc:
+            if not self._write_failing:
+                log.warning("cannot write events to %s: %s", path, exc)
+            self._write_failing = True
+            return
+        self._write_failing = False
 
     # --- per request ---
 
-    def begin_request(self, conv: Conversation, turn: int) -> None:
-        """Register one request of the coding agent. A higher user-message count starts a new Turn."""
+    def begin_request(self, conv: Conversation, user_count: int, last_user: str = "") -> None:
+        """Register one request of the coding agent. A new Developer message starts a new Turn: more
+        user messages than before, or another latest one (the client may have compacted the history,
+        so the count alone can shrink). The Turn number follows the user-message count where it can
+        and otherwise just goes up by one (DECISIONS.md #25)."""
         conv.requests += 1
-        if turn > conv.turn:
-            conv.turn = turn
+        last_hash = hashlib.sha256(last_user.encode("utf-8")).hexdigest()[:16]
+        if user_count > conv.user_count or last_hash != conv.last_user_hash:
+            conv.turn = max(conv.turn + 1, user_count)
             self.record_event(conv, "turn_started")
+        conv.user_count = user_count
+        conv.last_user_hash = last_hash
         conv.updated_at = _now()
 
     def apply_answers(
@@ -275,9 +301,11 @@ class ConversationStore:
             changed.append(p)
         users = user_messages(messages)
         for p in list(by_id.values()):
-            if p.mode is ProposalMode.TEXT and len(users) > p.turn:
-                # Text mode: the first Developer message after the Proposal is the answer.
-                answer = content_text(users[p.turn].get("content"))
+            if p.mode is ProposalMode.TEXT and conv.turn > p.turn and users:
+                # Text mode: the Developer message that starts the next Turn is the answer. That is the
+                # latest one of the first request in that Turn; no index into a history that may have
+                # been compacted meanwhile (DECISIONS.md #25).
+                answer = content_text(users[-1].get("content"))
                 self._settle(conv, p, parse_text_answer(answer, _spec(workflow, p.rule_id)), answer)
                 changed.append(p)
             elif p.mode is ProposalMode.TOOL and conv.turn > p.turn:

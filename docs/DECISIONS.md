@@ -178,3 +178,40 @@ project. Daarom staat het origineel in `skills/gateway-status/` van deze repo, e
 klein script aan (`curl` plus `python3`), met `CODER_GATEWAY_URL` en `CODER_GATEWAY_KEY` als
 instelling. Het script toont de laatst actieve Conversation van de API key via `/gateway/status`.
 De skill weet zijn eigen sessie-id niet, dus een filter per sessie zit er niet in.
+
+## 24. Eén lock per Conversation rond Decision en state-update
+Codex-review 1, bevinding 2. De handler las de Conversation, wachtte op de Decider en schreef het
+resultaat daarna in de dan geldende state. Een trage request uit Turn 1 kon zo na een snelle request
+uit Turn 2 een Flag terugzetten en zijn Proposal op Turn 2 boeken. Nu houdt `app.py` per Conversation
+een `asyncio.Lock` vast vanaf `begin_request` tot en met de gekozen Intervention. Het doorsturen naar
+upstream (en het streamen) valt buiten de lock. Waarom een lock en niet "oude resultaten weggooien":
+in één proces is het de eenvoudigste sluitende oplossing, en de volgorde van requests blijft de
+volgorde van verwerken. Prijs: een tweede request van dezelfde Conversation wacht hooguit één
+Decision (begrensd door `decision_timeout_s`). Opencode stuurt per sessie toch één request tegelijk.
+
+## 25. Een nieuwe Turn herken je aan het laatste Developer-bericht, niet alleen aan het aantal
+Codex-review 1, bevinding 3. `conv.turn` was het hoogste aantal user-berichten ooit gezien. Kort de
+client de geschiedenis in (compaction), dan liep de Turn niet meer op: afgewezen Proposals bleven
+onderdrukt en het antwoord in tekst-modus wees naar een index in de oude geschiedenis. Nu begint een
+nieuwe Turn als het aantal user-berichten groter is dan bij de vorige request, óf als het laatste
+user-bericht een andere tekst heeft (hash). Het Turn-nummer is `max(turn + 1, aantal)`: normaal
+gelijk aan het aantal user-berichten, na compaction gewoon één hoger. Het antwoord op een Proposal in
+tekst-modus is het laatste user-bericht van de eerste request in een latere Turn; geen index meer.
+Beperking: stuurt de client na compaction een ander laatste user-bericht zonder dat de Developer iets
+zei (bijv. een synthetische "ga door"), dan telt dat als nieuwe Turn.
+
+## 26. Het event-log is best effort
+Codex-review 1, bevinding 5. Een fout bij het schrijven naar `var/events.jsonl` (schijf vol, geen
+rechten) brak de request af, ook na een fail-open Decision. Het bestand is een hulpmiddel om terug te
+kijken, geen onderdeel van de Decision. Nu vangt `ConversationStore` een `OSError` af, logt één
+waarschuwing (opnieuw pas nadat het schrijven weer eens gelukt is) en gaat door. De events blijven in
+het geheugen, dus de read-API en het dashboard werken gewoon.
+
+## 27. Dashboard: open op localhost, optioneel een token
+Codex-review 1, bevinding 6. `/gateway/` heeft geen API key nodig en toont alle Virtual Models. Voor
+handmatig testen is dat handig (browser, geen header), en de Gateway bindt standaard op `127.0.0.1`.
+Nieuw: optioneel `dashboard_token` in `config/gateway.yaml`. Staat die, dan vraagt het dashboard
+`?token=<waarde>` (anders 401). `CODER_GATEWAY_HOST` kiest een ander adres; is dat geen loopback en
+staat er geen token, dan logt de Gateway bij het starten een waarschuwing. De read-API
+(`/gateway/status` enz.) blijft per Virtual Model afgeschermd met de API key.
+

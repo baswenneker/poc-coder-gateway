@@ -45,6 +45,9 @@ De Gateway schrijft per request één regel in de log.
 Open http://127.0.0.1:8787/gateway/ in de browser. De pagina ververst elke 3 seconden. Nu staat er
 "No Conversations yet."
 
+Staat `dashboard_token` in `config/gateway.yaml`, open dan
+`http://127.0.0.1:8787/gateway/?token=<waarde>`. Zonder token geeft de pagina 401.
+
 ## 4. Demo-project maken
 
 In een tweede terminal, in de repo:

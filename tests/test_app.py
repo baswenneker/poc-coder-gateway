@@ -13,7 +13,7 @@ from gateway_helpers import make_decision, make_workflow
 
 from coder_gateway.app import create_app
 from coder_gateway.config import DeciderConfig, GatewayConfig, UpstreamConfig
-from coder_gateway.domain import Decision, DecisionInput, Message, VirtualModel
+from coder_gateway.domain import Decider, Decision, DecisionInput, Message, VirtualModel
 from coder_gateway.store import ConversationStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -77,7 +77,7 @@ class Upstream:
         return httpx.Response(200, json=UPSTREAM_JSON)
 
 
-def make_config(timeout_s: float = 1.0) -> GatewayConfig:
+def make_config(timeout_s: float = 1.0, dashboard_token: str | None = None) -> GatewayConfig:
     wf = make_workflow()
     return GatewayConfig(
         upstream=UpstreamConfig(base_url="https://up.test/v1", api_key="sk-upstream"),
@@ -86,16 +86,23 @@ def make_config(timeout_s: float = 1.0) -> GatewayConfig:
             VirtualModel("fwd-coder", KEY, "gpt-5.4", "Follow the team workflow.", wf),
             VirtualModel("other", OTHER_KEY, "gpt-5.4-mini", "", wf),
         ),
+        dashboard_token=dashboard_token,
     )
 
 
 class Harness:
-    def __init__(self, decider: FakeDecider | None, timeout_s: float = 1.0) -> None:
+    def __init__(
+        self,
+        decider: Decider | None,
+        timeout_s: float = 1.0,
+        store: ConversationStore | None = None,
+        dashboard_token: str | None = None,
+    ) -> None:
         self.upstream = Upstream()
-        self.store = ConversationStore()
+        self.store = store or ConversationStore()
         self.decider = decider
         app = create_app(
-            make_config(timeout_s),
+            make_config(timeout_s, dashboard_token),
             decider=decider,
             strategy_fn=identity_strategy,
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(self.upstream.handler)),
@@ -225,6 +232,52 @@ async def test_fingerprint_when_no_session_header() -> None:
     assert len(convs) == 1 and convs[0].id.startswith("fp:") and convs[0].turn == 2
 
 
+async def test_stale_request_does_not_overwrite_newer_turn() -> None:
+    # Codex review 1, finding 2: a Turn 1 request that is still in the Decider must not restore a
+    # Flag or record its Proposal against Turn 2, which meanwhile arrived with a clean Decision.
+    class GatedDecider:
+        name = "gated"
+
+        def __init__(self) -> None:
+            self.entered = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def decide(self, inp: DecisionInput) -> Decision:
+            if inp.transcript[-1]["content"] == "turn one":
+                self.entered.set()
+                await self.release.wait()
+                return make_decision("flag_no_spec", "propose_issue")
+            return make_decision()
+
+    decider = GatedDecider()
+    h = Harness(decider, timeout_s=5.0)
+    first = asyncio.create_task(h.chat(agent_body(user("turn one"))))
+    await decider.entered.wait()
+    turn_two = agent_body(user("turn one"), {"role": "assistant", "content": "ok"}, user("turn two"))
+    second = asyncio.create_task(h.chat(turn_two))
+    await asyncio.sleep(0.05)  # without serialisation Turn 2 completes here
+    decider.release.set()
+    r1, r2 = await asyncio.gather(first, second)
+    assert r2.json()["choices"][0]["message"]["content"] == "upstream"
+    conv = h.store.get("fwd-coder", "sid:ses_1")
+    assert conv is not None and conv.turn == 2
+    assert conv.flags == {}
+    assert conv.last_decision is not None and conv.last_decision["broken"] == []
+    assert all(p.turn == 1 for p in conv.proposals)
+
+
+async def test_event_log_write_failure_does_not_abort_request(tmp_path: Path) -> None:
+    # Codex review 1, finding 5.
+    path = tmp_path / "events.jsonl"
+    store = ConversationStore(events_path=path)
+    path.mkdir()  # appending to it now fails with an OSError
+    h = Harness(FakeDecider(make_decision("flag_no_spec")), store=store)
+    r = await h.chat(agent_body(user("x")))
+    assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"] == "upstream"
+    conv = h.store.get("fwd-coder", "sid:ses_1")
+    assert conv is not None and "flag_no_spec" in conv.flags
+
+
 # --- Flags ---------------------------------------------------------------------------------------------
 
 
@@ -325,6 +378,32 @@ async def test_proposal_stream_tool_mode() -> None:
     assert chunks[1]["choices"][0]["delta"]["tool_calls"][0]["id"] == "gateway_proposal_1"
     assert chunks[2]["choices"][0]["finish_reason"] == "tool_calls"
     assert chunks[3]["choices"] == [] and chunks[3]["usage"]["total_tokens"] == 0
+
+
+async def test_text_proposal_answered_after_history_compaction() -> None:
+    # Codex review 1, finding 3: the client compacts the history, so it carries fewer user messages
+    # than before. A new Developer message must still start a new Turn and settle the Proposal.
+    h = Harness(FakeDecider(make_decision("propose_issue")))
+    history: list[Message] = [
+        user("a"),
+        {"role": "assistant", "content": "x"},
+        user("b"),
+        {"role": "assistant", "content": "y"},
+        user("c"),
+    ]
+    r = await h.chat(agent_body(*history, question_tool=False))
+    text = r.json()["choices"][0]["message"]["content"]
+    assert text.endswith("(antwoord ja of nee)")
+    compacted = [user("summary of a, b and c"), {"role": "assistant", "content": text}, user("nee")]
+    r = await h.chat(agent_body(*compacted, question_tool=False))
+    assert r.json()["choices"][0]["message"]["content"] == "upstream"
+    conv = h.store.get("fwd-coder", "sid:ses_1")
+    assert conv is not None and conv.turn == 4
+    assert conv.proposals[0].status == "declined" and conv.proposals[0].answer == "nee"
+    compacted += [{"role": "assistant", "content": "upstream"}, user("go on")]
+    r = await h.chat(agent_body(*compacted, question_tool=False))
+    assert r.json()["choices"][0]["message"]["content"].endswith("(antwoord ja of nee)")
+    assert conv.turn == 5
 
 
 # --- Block ---------------------------------------------------------------------------------------------
@@ -429,3 +508,13 @@ async def test_dashboard_and_health() -> None:
     assert r.status_code == 200 and "flag_no_spec" in r.text
     assert "<b>x</b>" not in r.text and "&lt;b&gt;x&lt;/b&gt;" in r.text
     assert (await h.client.get("/healthz")).json() == {"status": "ok"}
+
+
+async def test_dashboard_token_when_configured() -> None:
+    # Codex review 1, finding 6: with `dashboard_token` set, /gateway/ needs ?token=.
+    h = Harness(FakeDecider(), dashboard_token="s3cret")
+    assert (await h.client.get("/gateway/")).status_code == 401
+    assert (await h.client.get("/gateway/?token=wrong")).status_code == 401
+    assert (await h.client.get("/gateway/", headers=AUTH)).status_code == 401
+    r = await h.client.get("/gateway/?token=s3cret")
+    assert r.status_code == 200 and "Coder Gateway" in r.text

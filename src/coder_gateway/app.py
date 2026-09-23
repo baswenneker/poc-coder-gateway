@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import secrets
 import time
+from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -17,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from coder_gateway import transcript
 from coder_gateway.config import GatewayConfig
 from coder_gateway.domain import Decider, Decision, DecisionInput, Intervention, Message, Rule, VirtualModel
-from coder_gateway.fingerprint import conversation_id, user_messages
+from coder_gateway.fingerprint import content_text, conversation_id, store_key, user_messages
 from coder_gateway.interventions import (
     QUESTION_TOOL,
     GatewayReply,
@@ -65,6 +67,10 @@ def create_app(
     owns_client = http_client is None
     client = http_client or httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0))
     upstream = Upstream(config.upstream, client)
+    # One lock per Conversation, held from reading the request up to the chosen Intervention (not while
+    # forwarding upstream): a request that waits for the Decider cannot overwrite the state of a later
+    # request of the same Conversation (DECISIONS.md #24).
+    locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -181,30 +187,34 @@ def create_app(
             log.info("vm=%s passthrough (subagent of %s) stream=%s", vm.name, parent, stream)
             return await upstream.forward(body, vm)
 
-        conv = store.get_or_create(vm.name, conversation_id(request.headers, messages))
-        store.begin_request(conv, len(user_messages(messages)))
-        store.apply_answers(conv, messages, vm.workflow)
-
-        decision = await decide(vm, conv, messages)
-        if decision is not None:
-            summary = store.set_decision(conv, decision)
-            store.record_event(conv, "decision_error" if decision.error else "decision", decision=summary)
-            store.update_flags(conv, decision, vm.workflow)
-
-        action, reply, rule = choose_intervention(vm, conv, decision, body, messages)
+        conv_id = conversation_id(request.headers, messages)
         stream = bool(body.get("stream"))
-        log.info(
-            "conv=%s turn=%d req=%d decision=%s broken=%s action=%s%s",
-            conv.id,
-            conv.turn,
-            conv.requests,
-            f"{decision.latency_ms:.0f}ms/{decision.decider}" if decision else "-",
-            (f"error({decision.error})" if decision.error else decision.broken()) if decision else "-",
-            action,
-            f"({rule.id})" if rule else "",
-        )
+        async with locks[store_key(vm.name, conv_id)]:
+            conv = store.get_or_create(vm.name, conv_id)
+            users = user_messages(messages)
+            store.begin_request(conv, len(users), content_text(users[-1].get("content")) if users else "")
+            store.apply_answers(conv, messages, vm.workflow)
+
+            decision = await decide(vm, conv, messages)
+            if decision is not None:
+                summary = store.set_decision(conv, decision)
+                store.record_event(conv, "decision_error" if decision.error else "decision", decision=summary)
+                store.update_flags(conv, decision, vm.workflow)
+
+            action, reply, rule = choose_intervention(vm, conv, decision, body, messages)
+            log.info(
+                "conv=%s turn=%d req=%d decision=%s broken=%s action=%s%s",
+                conv.id,
+                conv.turn,
+                conv.requests,
+                f"{decision.latency_ms:.0f}ms/{decision.decider}" if decision else "-",
+                (f"error({decision.error})" if decision.error else decision.broken()) if decision else "-",
+                action,
+                f"({rule.id})" if rule else "",
+            )
+            if reply is None:
+                store.record_event(conv, "forwarded", stream=stream)
         if reply is None:
-            store.record_event(conv, "forwarded", stream=stream)
             return await upstream.forward(body, vm)
         if stream:
             include_usage = bool((body.get("stream_options") or {}).get("include_usage"))
@@ -277,8 +287,12 @@ def create_app(
         }
 
     @app.get("/gateway/", response_class=HTMLResponse)
-    async def dashboard() -> str:
-        """Server-rendered overview of all Conversations. No auth: prototype, localhost only."""
+    async def dashboard(token: str | None = None) -> str:
+        """Server-rendered overview of all Conversations. Open unless `dashboard_token` is configured,
+        then `?token=` must match (DECISIONS.md #27)."""
+        expected = config.dashboard_token
+        if expected and not secrets.compare_digest((token or "").encode(), expected.encode()):
+            raise HTTPException(status_code=401, detail="invalid or missing dashboard token")
         return render_dashboard(store.list_conversations())
 
     return app

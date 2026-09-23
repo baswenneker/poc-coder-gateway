@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from gateway_helpers import make_decision, make_workflow
 
 from coder_gateway.domain import Message, ProposalSpec
@@ -197,3 +198,34 @@ def test_decider_state_and_phase() -> None:
     state = store.decider_state(conv)
     assert state == {"turn": 1, "phase": "implement", "active_flags": ["flag_no_spec"], "proposals": []}
     assert conv.last_decision is not None and conv.last_decision["broken"] == ["flag_no_spec"]
+
+
+def test_new_turn_when_history_shrinks() -> None:
+    # Codex review 1, finding 3: after compaction the request carries fewer user messages. A changed
+    # latest Developer message still starts a new Turn; the same one (more agent steps) does not.
+    store = ConversationStore()
+    conv = store.get_or_create("vm", "c")
+    store.begin_request(conv, 3, "c")
+    assert conv.turn == 3
+    store.begin_request(conv, 1, "c")  # compacted mid-Turn: same latest message
+    assert conv.turn == 3
+    store.begin_request(conv, 2, "d")  # compacted history plus a new Developer message
+    assert conv.turn == 4
+    store.begin_request(conv, 2, "d")
+    assert conv.turn == 4
+    store.begin_request(conv, 3, "d")  # the same text sent again is a new message
+    assert conv.turn == 5
+
+
+def test_event_log_write_failure_is_logged_once(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    # Codex review 1, finding 5: an unwritable events file must not break request handling.
+    path = tmp_path / "events.jsonl"
+    store = ConversationStore(events_path=path)
+    path.mkdir()
+    conv = store.get_or_create("vm", "c")
+    store.record_event(conv, "x")
+    assert [e["type"] for e in conv.events] == ["conversation_started", "x"]
+    assert len([r for r in caplog.records if "events" in r.getMessage()]) == 1
+    path.rmdir()
+    store.record_event(conv, "y")  # writable again: the write goes through
+    assert [json.loads(line)["type"] for line in path.read_text().splitlines()] == ["y"]

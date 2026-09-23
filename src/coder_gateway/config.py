@@ -46,6 +46,7 @@ class GatewayConfig:
     decider: DeciderConfig
     virtual_models: tuple[VirtualModel, ...]
     events_path: Path | None = None
+    dashboard_token: str | None = None  # unset: /gateway/ is open (localhost only, DECISIONS.md #27)
 
     def virtual_model_for_key(self, api_key: str) -> VirtualModel | None:
         for vm in self.virtual_models:
@@ -97,6 +98,7 @@ def parse_config(data: dict[str, Any], base_dir: Path) -> GatewayConfig:
         decider=decider,
         virtual_models=tuple(vms),
         events_path=(base_dir / events_path).resolve() if events_path else None,
+        dashboard_token=str(data["dashboard_token"]) if data.get("dashboard_token") else None,
     )
 
 
