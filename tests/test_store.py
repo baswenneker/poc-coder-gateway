@@ -47,6 +47,13 @@ def test_parse_tool_answer_real_opencode_format() -> None:
     assert parse_tool_answer("The user dismissed this question", SPEC) is ProposalStatus.DECLINED
 
 
+def test_parse_tool_answer_requires_exact_match_in_known_format() -> None:
+    # A free-form value that merely contains the accept label must not count as accepted, or the
+    # Proposal is suppressed for good (codex-review-2, finding 1).
+    answer = _opencode_answer("Niet Ja, maak een issue; eerst de spec")
+    assert parse_tool_answer(answer, SPEC) is ProposalStatus.ANSWERED
+
+
 def test_parse_tool_answer_ignores_labels_in_question_text() -> None:
     question = "Nee, ga door is ook goed. Zullen we eerst een issue aanmaken?"
     answer = _opencode_answer("Ja, maak een issue", question=question)
@@ -229,3 +236,19 @@ def test_event_log_write_failure_is_logged_once(tmp_path: Path, caplog: pytest.L
     path.rmdir()
     store.record_event(conv, "y")  # writable again: the write goes through
     assert [json.loads(line)["type"] for line in path.read_text().splitlines()] == ["y"]
+
+
+def test_event_log_dir_creation_failure_does_not_block_startup(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Codex review 2, finding 3: a directory that cannot be created must not stop the Gateway from
+    # starting up; it just falls back to in-memory events.
+    blocker = tmp_path / "var"
+    blocker.write_text("not a directory")
+    path = blocker / "events.jsonl"
+    store = ConversationStore(events_path=path)
+    conv = store.get_or_create("vm", "c")
+    store.record_event(conv, "x")
+    assert [e["type"] for e in conv.events] == ["conversation_started", "x"]
+    assert not path.exists()
+    assert len([r for r in caplog.records if "events" in r.getMessage()]) == 1

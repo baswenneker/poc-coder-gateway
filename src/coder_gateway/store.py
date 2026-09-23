@@ -75,7 +75,10 @@ def _classify_labels(text: str, spec: ProposalSpec) -> ProposalStatus | None:
 
 def parse_tool_answer(content: str, spec: ProposalSpec) -> ProposalStatus:
     """Interpret opencode's `question` tool result. For opencode's known format only the answer
-    value(s) after `"<question>"=` count, so words in the question text cannot tip the result.
+    value(s) after `"<question>"=` count, so words in the question text cannot tip the result, and
+    only an exact (case-insensitive, trimmed) match with a label decides: a free-form value that
+    merely contains the accept or decline label (e.g. "Niet Ja, maak een issue; eerst de spec")
+    stays `answered`, same as a value that selects both labels.
     Other formats: the accept/decline label anywhere in the text (case-insensitive) decides; a
     dismissed question counts as declined; anything else is a free-form answer."""
     text = content.lower()
@@ -87,7 +90,7 @@ def parse_tool_answer(content: str, spec: ProposalSpec) -> ProposalStatus:
                 return ProposalStatus.ACCEPTED
             if answer == spec.decline_label.lower():
                 return ProposalStatus.DECLINED
-            return _classify_labels(answer, spec) or ProposalStatus.ANSWERED
+            return ProposalStatus.ANSWERED
     status = _classify_labels(text, spec)
     if status is not None:
         return status
@@ -202,11 +205,17 @@ def decision_to_dict(decision: Decision) -> dict[str, Any]:
 class ConversationStore:
     def __init__(self, events_path: Path | None = None, max_events: int = MAX_EVENTS) -> None:
         self._conversations: dict[str, Conversation] = {}
-        self._events_path = events_path
         self._max_events = max_events
         self._write_failing = False
         if events_path is not None:
-            events_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                events_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                # Same best-effort policy as _append (DECISIONS.md #26): warn once and keep running
+                # with in-memory events only, instead of failing Gateway startup.
+                log.warning("cannot create directory for events file %s: %s", events_path, exc)
+                events_path = None
+        self._events_path = events_path
 
     # --- lookup ---
 

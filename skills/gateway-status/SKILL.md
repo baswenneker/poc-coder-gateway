@@ -23,8 +23,9 @@ The Gateway has a read API. This skill queries it and shows the result to the de
    ```
 
    It prints a plain-text summary. Add `--json` for the raw JSON of `GET /gateway/status`.
-   The script reads `CODER_GATEWAY_URL` (default `http://127.0.0.1:8787`) and
-   `CODER_GATEWAY_KEY` (default `sk-gw-fwd-demo`, the demo Virtual Model key).
+   The script reads `CODER_GATEWAY_URL` and `CODER_GATEWAY_KEY`. Unset, it falls back to the `gw`
+   provider in the nearest `opencode.json` (walking up from the current directory), then to
+   `http://127.0.0.1:8787` / `sk-gw-fwd-demo` (the demo Virtual Model key).
 
 2. Show the summary to the developer. Keep it short, in the developer's language:
    - active flags (rule id, since which turn, probability);

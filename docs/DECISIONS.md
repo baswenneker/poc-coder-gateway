@@ -206,6 +206,9 @@ rechten) brak de request af, ook na een fail-open Decision. Het bestand is een h
 kijken, geen onderdeel van de Decision. Nu vangt `ConversationStore` een `OSError` af, logt één
 waarschuwing (opnieuw pas nadat het schrijven weer eens gelukt is) en gaat door. De events blijven in
 het geheugen, dus de read-API en het dashboard werken gewoon.
+Codex-review 2, bevinding 3: hetzelfde geldt voor het aanmaken van de map van `var/events.jsonl` bij
+het opstarten. Lukt `mkdir` niet (geen rechten), dan logt `ConversationStore.__init__` één
+waarschuwing en start de Gateway gewoon door, zonder events-bestand.
 
 ## 27. Dashboard: open op localhost, optioneel een token
 Codex-review 1, bevinding 6. `/gateway/` heeft geen API key nodig en toont alle Virtual Models. Voor

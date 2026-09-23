@@ -61,7 +61,9 @@ Het script maakt een git repo met `calc.py`, `test_calc.py`, een `opencode.json`
 Gateway wijst en de skill `gateway-status` in `.opencode/skills/`. Bestaat de map al, dan stopt het
 script. Verwijder de map dan eerst: `rm -rf /tmp/coder-gateway-demo`.
 
-Een andere Gateway-URL of key geef je mee met `CODER_GATEWAY_URL` en `CODER_GATEWAY_KEY`.
+Een andere Gateway-URL of key geef je mee met `CODER_GATEWAY_URL` en `CODER_GATEWAY_KEY`. De skill
+`gateway-status.sh` leest zonder die env-vars automatisch de `gw`-provider uit de dichtstbijzijnde
+`opencode.json`, dus dat werkt ook met een niet-standaard URL of key.
 
 Start opencode:
 
