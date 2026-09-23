@@ -1,0 +1,63 @@
+# Workflow Definition: the Rules a team wants its developers to follow.
+# Each Rule is judged per request by the Decider. `broken_when` is phrased so that
+# TRUE means the Rule is broken. `intervention` is one of: flag | propose | block.
+# A Rule only blocks when its intervention is explicitly `block`.
+name: fwd-default
+
+phases:
+  - id: explore
+    description: The developer is asking questions or reading code; no changes yet.
+  - id: implement
+    description: Code is being written or edited.
+  - id: verify
+    description: Tests, lint or builds are being run.
+  - id: ship
+    description: Committing, pushing or opening a pull request.
+
+rules:
+  - id: propose_issue
+    description: Work starts from an issue.
+    broken_when: >-
+      The developer asks to write, change or fix code (or the assistant has started editing files),
+      and nowhere in the conversation is an issue, ticket or work item referenced
+      (e.g. '#123', 'issue 42', 'JIRA-7', a GitHub/GitLab issue URL).
+    ok_when: >-
+      An issue or ticket is referenced anywhere in the conversation, or the developer is only asking
+      questions / exploring without requesting code changes.
+    intervention: propose
+    threshold: 0.7
+    proposal:
+      question: >-
+        Er is nog geen issue genoemd voor dit werk. Zullen we eerst een issue aanmaken,
+        zodat het werk traceerbaar is?
+      header: Eerst een issue?
+      accept_label: Ja, maak een issue
+      accept_description: Maak eerst een issue aan en ga daarna verder
+      decline_label: Nee, ga door
+      decline_description: Ga door zonder issue
+
+  - id: flag_no_spec
+    description: Code changes are based on a discussed spec file.
+    broken_when: >-
+      Code is being changed or the developer asks for code changes, and no specification file
+      (e.g. SPEC.md, PLAN.md, a design doc, docs/*.md describing the change) has been mentioned,
+      read or discussed in the conversation.
+    ok_when: >-
+      A spec or plan file has been mentioned, read or discussed, or no code is being changed.
+    intervention: flag
+    threshold: 0.7
+
+  - id: block_pr_without_tests
+    description: A pull request is only opened after tests are reported green.
+    broken_when: >-
+      The developer asks to open/create a pull request (or 'gh pr create' or an equivalent command
+      appears in the latest messages), and the conversation does not show that the tests were run
+      and passed after the last code change.
+    ok_when: >-
+      No pull request is being created, or a test run that passed is shown after the last code change.
+    intervention: block
+    threshold: 0.7
+    block_message: >-
+      De Gateway blokkeert dit verzoek: er wordt een pull request aangemaakt, maar in dit gesprek is
+      niet gemeld dat de tests groen zijn na de laatste wijziging. Draai eerst de tests en laat zien
+      dat ze slagen; vraag daarna opnieuw om de pull request.
