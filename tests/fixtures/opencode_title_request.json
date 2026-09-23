@@ -1,0 +1,22 @@
+{
+ "model": "fwd-coder",
+ "max_tokens": 32000,
+ "messages": [
+  {
+   "role": "system",
+   "content": "You are a title generator. You output ONLY a thread title. Nothing else.\n\n<task>\nGenerate a brief title that would help the user find this conversation later.\n\nFollow all rules in <rules>\nUse the <examples> so you know what a good title looks like.\nYour output must be:\n- A single line\n- \u226450 characters\n- No explanations\n</task>\n\n<rules>\n- you MUST use the same language as the user message you are summarizing\n- Title must be grammatically correct and read naturally - no word salad\n- Never include tool names in the title (e.g. \"read tool\", \"bash tool\", \"edit tool\")\n- Focus on the main topic or qu\n...[truncated for fixture]"
+  },
+  {
+   "role": "user",
+   "content": "Generate a title for this conversation:\n"
+  },
+  {
+   "role": "user",
+   "content": "hi"
+  }
+ ],
+ "stream": true,
+ "stream_options": {
+  "include_usage": true
+ }
+}
