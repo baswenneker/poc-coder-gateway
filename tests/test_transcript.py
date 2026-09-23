@@ -115,11 +115,31 @@ def test_compact_transcript_includes_tool_calls_on_assistant() -> None:
     ]
 
 
-def test_compact_transcript_truncates_long_tool_output() -> None:
-    long_output = "x" * 5000
+def test_compact_transcript_keeps_moderately_long_tool_output_intact() -> None:
+    # Regression: a tool output well under the safety cap (e.g. a long pytest log ending in a
+    # passing-test summary) must survive untouched, whatever the strategy produced it. The old
+    # code flat-truncated every tool message to 2000 chars, silently dropping the tail.
+    long_output = "x" * 5000 + "\n===== 42 passed in 3.1s ====="
     messages = [_msg("tool", long_output)]
     result = compact_transcript(messages)
-    assert len(result[0]["text"]) == 2000
+    assert result[0]["text"] == long_output
+    assert result[0]["text"].endswith("42 passed in 3.1s =====")
+
+
+def test_compact_transcript_caps_enormous_tool_output_keeping_head_and_tail() -> None:
+    # Only a very generous safety cap applies, and it keeps both ends so a summary at the tail
+    # of an enormous tool output (e.g. a huge pytest run) still survives.
+    head = "head-marker-" + "a" * 1500
+    tail = "b" * 3000 + "-tail-marker: 42 passed in 3.1s"
+    middle = "m" * 30000
+    long_output = head + middle + tail
+    messages = [_msg("tool", long_output)]
+    result = compact_transcript(messages)
+    text = result[0]["text"]
+    assert text.startswith("head-marker-")
+    assert text.endswith("tail-marker: 42 passed in 3.1s")
+    assert "chars omitted" in text
+    assert len(text) < len(long_output)
 
 
 def test_compact_transcript_handles_none_content() -> None:

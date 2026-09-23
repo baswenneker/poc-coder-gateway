@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-from coder_gateway.deciders.fallback import FallbackDecider, NoneDecider
+from coder_gateway.deciders.fallback import FallbackDecider, NoneDecider, SoloDecider
 from coder_gateway.deciders.jev import JevDecider
 from coder_gateway.deciders.llm import LLMDecider
 from coder_gateway.domain import Decider
 
-__all__ = ["FallbackDecider", "JevDecider", "LLMDecider", "NoneDecider", "build_decider"]
+__all__ = [
+    "FallbackDecider",
+    "JevDecider",
+    "LLMDecider",
+    "NoneDecider",
+    "SoloDecider",
+    "build_decider",
+]
 
 
 def _build_named(
@@ -45,7 +52,14 @@ def build_decider(
     openai_base_url: str,
     typesafe_api_key: str | None,
 ) -> Decider:
-    """Build the configured Decider. primary: 'jev' | 'llm' | 'none'; fallback: 'llm' | 'none'."""
+    """Build the configured Decider. primary: 'jev' | 'llm' | 'none'; fallback: 'llm' | 'none'.
+
+    fallback='none' means exactly that: no fallback Decider is tried. The primary still fails
+    open on exception/timeout (see docs/DECISIONS.md #5), via SoloDecider -- not by wrapping the
+    primary in a FallbackDecider with NoneDecider as its fallback, which would turn a primary
+    failure into a Decision that looks like a correct, error-free "nothing broken" answer (see
+    docs/DECISIONS.md #10 and the benchmark finding this fixes).
+    """
     kwargs: dict[str, object] = {
         "jev_model": jev_model,
         "llm_model": llm_model,
@@ -56,5 +70,7 @@ def build_decider(
     primary_decider = _build_named(primary, **kwargs)  # type: ignore[arg-type]
     if primary == "none":
         return primary_decider
+    if fallback == "none":
+        return SoloDecider(primary_decider, timeout_s)
     fallback_decider = _build_named(fallback, **kwargs)  # type: ignore[arg-type]
     return FallbackDecider(primary_decider, fallback_decider, timeout_s)

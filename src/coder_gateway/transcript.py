@@ -17,7 +17,16 @@ from coder_gateway.domain import Message
 STRATEGIES: tuple[str, ...] = ("full", "last_10", "last_10_truncated", "summary_last_10")
 
 _LAST_N = 10
-_TOOL_TEXT_LIMIT = 2000
+
+# Safety cap against pathologically enormous tool outputs, applied in compact_transcript()
+# regardless of strategy. Deliberately generous and head+tail (not a flat truncate-to-N-chars):
+# truncation of *what the Decider sees* is the transcript strategy's job (apply_strategy, e.g.
+# 'last_10_truncated'); this cap only guards against a single tool call dumping something huge.
+# Keeping both ends means a summary at the tail of a long tool output (e.g. "42 passed in 3.1s"
+# at the end of a pytest log) survives even when the cap kicks in. See docs/DECISIONS.md.
+_TOOL_SAFETY_CAP = 20_000
+_TOOL_SAFETY_HEAD = 1_500
+_TOOL_SAFETY_TAIL = 3_000
 
 
 def _is_non_system(message: Message) -> bool:
@@ -109,12 +118,27 @@ def _tool_calls_view(message: Message) -> list[dict[str, Any]] | None:
     return view
 
 
+def _cap_tool_text(text: str) -> str:
+    """Apply the generous head+tail safety cap (see _TOOL_SAFETY_CAP). Below the cap, `text` is
+    returned unchanged: the transcript strategy already decided what the Decider should see
+    (e.g. 'last_10_truncated' already replaced older tool output with '<truncated>'), so this
+    must not re-truncate a full tool result that a strategy like 'full' or 'last_10' deliberately
+    kept -- doing so previously hid a passing-test summary at the tail of long tool output.
+    """
+    if len(text) <= _TOOL_SAFETY_CAP:
+        return text
+    head = text[:_TOOL_SAFETY_HEAD]
+    tail = text[-_TOOL_SAFETY_TAIL:]
+    omitted = len(text) - _TOOL_SAFETY_HEAD - _TOOL_SAFETY_TAIL
+    return f"{head}...[{omitted} chars omitted]...{tail}"
+
+
 def compact_transcript(messages: list[Message]) -> list[dict[str, Any]]:
     """A compact, token-efficient JSON view of a Transcript for the Decider.
 
     [{"role": "user", "text": ...},
      {"role": "assistant", "text": ..., "tool_calls": [{"name": "bash", "args": {...}}]},
-     {"role": "tool", "text": <tool output, truncated to _TOOL_TEXT_LIMIT chars>}]
+     {"role": "tool", "text": <tool output, capped only if pathologically large>}]
 
     Assumes system messages were already dropped by `apply_strategy`; any that remain are
     dropped here too, so a Decider never sees the (long, irrelevant) system prompt.
@@ -126,7 +150,7 @@ def compact_transcript(messages: list[Message]) -> list[dict[str, Any]]:
             continue
         text = _content_to_text(message.get("content"))
         if role == "tool":
-            entry: dict[str, Any] = {"role": "tool", "text": text[:_TOOL_TEXT_LIMIT]}
+            entry: dict[str, Any] = {"role": "tool", "text": _cap_tool_text(text)}
             compact.append(entry)
             continue
         entry = {"role": role, "text": text}

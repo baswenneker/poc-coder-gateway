@@ -29,11 +29,11 @@ class NoneDecider:
         return Decision(verdicts=verdicts, decider=self.name, latency_ms=0.0)
 
 
-def _fail_open(inp: DecisionInput, decider_name: str, error: str) -> Decision:
+def _fail_open(inp: DecisionInput, decider_name: str, error: str, latency_ms: float = 0.0) -> Decision:
     verdicts = {
         rule.id: RuleVerdict(rule_id=rule.id, probability=0.0, broken=False) for rule in inp.workflow.rules
     }
-    return Decision(verdicts=verdicts, decider=decider_name, latency_ms=0.0, error=error)
+    return Decision(verdicts=verdicts, decider=decider_name, latency_ms=latency_ms, error=error)
 
 
 class FallbackDecider:
@@ -56,8 +56,36 @@ class FallbackDecider:
             try:
                 return await asyncio.wait_for(self._fallback.decide(inp), timeout=self._timeout_s)
             except Exception as fallback_error:  # noqa: BLE001 - both failed: fail open
+                total_elapsed_ms = (time.perf_counter() - start) * 1000
                 error = (
                     f"primary {self._primary.name!r} failed after {primary_elapsed_ms:.0f}ms: "
                     f"{primary_error!r}; fallback {self._fallback.name!r} failed: {fallback_error!r}"
                 )
-                return _fail_open(inp, self.name, error)
+                return _fail_open(inp, self.name, error, latency_ms=total_elapsed_ms)
+
+
+class SoloDecider:
+    """Runs `primary` with a timeout and no fallback (`fallback='none'`, see
+    docs/DECISIONS.md #10 and the benchmark finding it was written to fix). On exception or
+    timeout it fails open like FallbackDecider (no broken Rules), but crucially with `error` set
+    and `latency_ms` reflecting the failed attempt.
+
+    This is deliberately NOT `FallbackDecider(primary, NoneDecider(), timeout_s)`: that would make
+    the "fallback" (NoneDecider) *succeed* on a primary failure, producing a Decision with
+    error=None and latency_ms=0.0 that looks like a correct "nothing broken" answer instead of a
+    failed one -- e.g. in the benchmark, silently counted as a correct prediction.
+    """
+
+    def __init__(self, primary: Decider, timeout_s: float) -> None:
+        self._primary = primary
+        self._timeout_s = timeout_s
+        self.name = f"solo({primary.name})"
+
+    async def decide(self, inp: DecisionInput) -> Decision:
+        start = time.perf_counter()
+        try:
+            return await asyncio.wait_for(self._primary.decide(inp), timeout=self._timeout_s)
+        except Exception as primary_error:  # noqa: BLE001 - fail open, but report the failure
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            error = f"primary {self._primary.name!r} failed after {elapsed_ms:.0f}ms: {primary_error!r}"
+            return _fail_open(inp, self.name, error, latency_ms=elapsed_ms)

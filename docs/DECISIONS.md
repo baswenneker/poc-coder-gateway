@@ -112,3 +112,28 @@ gesprekken waar het issue of de spec vroeg genoemd is. Jev gebruikte bij `full` 
 input-tokens, dus de kosten blijven klein. Daarom staat `config/gateway.yaml` op `full`. De
 gemiddelde latency was ~0,9 s met een p95 van ~2,3 s; een timeout van 1,5 s zou dus vaak naar de
 terugval springen. De timeout per Decider-call staat daarom op 3 s. Resultaten: `var/benchmark/`.
+
+## 18. `compact_transcript` kort alleen nog met een zeer ruime head+tail-cap, niet meer vast op
+2000 tekens
+Elke `role='tool'`-boodschap werd altijd tot 2000 tekens afgekapt, ongeacht de strategie. Bij een
+lang testlog met de samenvatting aan het eind ("42 passed") verdween precies dat stukje, ook bij
+strategie `full`/`last_10` die de tool-output juist volledig wilden laten zien — een vals Block
+na groene tests. Inkorten naar strategie is al het werk van `apply_strategy` (bijv.
+`last_10_truncated` zet oudere tool-output al op `<truncated>`); `compact_transcript` mag dat niet
+nog eens overdoen. Nu geldt alleen een generieke veiligheidsklep tegen extreem grote tool-output
+(> 20.000 tekens): eerste 1.500 + laatste 3.000 tekens met een `...[N chars omitted]...`-merker
+ertussen, zodat een samenvatting aan het eind altijd overleeft.
+
+## 19. `build_decider(fallback="none")` levert een `SoloDecider`, geen `FallbackDecider` met
+`NoneDecider` als terugval
+Zoals gebouwd wrapte `fallback="none"` de primary alsnog in `FallbackDecider(primary,
+NoneDecider(), timeout_s)`. Een primary-exception liet de terugval (`NoneDecider`) dan gewoon
+slagen: een Decision met alle Rules niet-gebroken, `error=None` en `latency_ms=0.0` — niet te
+onderscheiden van een correct "niets gebroken"-antwoord. In de benchmark (die juist met
+`fallback="none"` de Decider kaal wil meten, zie #8) telde een kapotte call zo als een juiste
+voorspelling in plaats van als `errors` (#10).
+Nieuwe klasse `SoloDecider` (`deciders/fallback.py`): draait alleen de primary, met timeout; bij
+exception/timeout faalt hij open (geen gebroken Rules), mét `error` gezet en `latency_ms` van de
+mislukte poging. `build_decider` gebruikt `SoloDecider` wanneer `fallback="none"` en `primary !=
+"none"`. De Gateway zelf (`config/gateway.yaml`: `fallback: llm`) blijft ongewijzigd via
+`FallbackDecider` lopen, en blijft dus fail-open op dezelfde manier als voorheen (#5).

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from coder_gateway.deciders import build_decider
-from coder_gateway.deciders.fallback import FallbackDecider, NoneDecider
+from coder_gateway.deciders.fallback import FallbackDecider, NoneDecider, SoloDecider
 from coder_gateway.deciders.jev import JevDecider
 from coder_gateway.deciders.llm import LLMDecider
 from coder_gateway.domain import (
@@ -128,6 +128,40 @@ async def test_fallback_fails_open_when_both_fail() -> None:
     assert decision.error is not None
     assert "primary broke" in decision.error
     assert "fallback broke" in decision.error
+
+
+# --- SoloDecider (fallback='none': no fallback, but still fails open) ------------------------
+
+
+async def test_solo_decider_returns_primary_result_when_it_succeeds() -> None:
+    primary = _StubDecider("primary", decision=_decision("primary"))
+    decider = SoloDecider(primary, timeout_s=1.0)
+    decision = await decider.decide(_input())
+    assert decision.decider == "primary"
+    assert decision.error is None
+
+
+async def test_solo_decider_fails_open_with_error_when_primary_raises() -> None:
+    # Regression for DECISIONS.md #10 / benchmark finding: fallback='none' must not silently
+    # turn a primary exception into an all-clear ("nothing broken", error=None, latency 0). It
+    # must fail open (no broken Rules) but *with* `error` set and a real latency, so callers
+    # (the benchmark, in particular) can tell "no answer" apart from "correct answer".
+    primary = _StubDecider("primary", error=RuntimeError("primary broke"))
+    decider = SoloDecider(primary, timeout_s=1.0)
+    decision = await decider.decide(_input())
+    assert decision.broken() == []
+    assert decision.error is not None
+    assert "primary broke" in decision.error
+    assert decision.latency_ms > 0.0
+
+
+async def test_solo_decider_fails_open_with_error_when_primary_times_out() -> None:
+    primary = _StubDecider("primary", decision=_decision("primary"), delay=0.5)
+    decider = SoloDecider(primary, timeout_s=0.01)
+    decision = await decider.decide(_input())
+    assert decision.broken() == []
+    assert decision.error is not None
+    assert decision.latency_ms > 0.0
 
 
 # --- JevDecider ------------------------------------------------------------------------------
@@ -308,7 +342,10 @@ def test_build_decider_none_primary_returns_none_decider() -> None:
     assert isinstance(decider, NoneDecider)
 
 
-def test_build_decider_wraps_non_none_primary_in_fallback_decider() -> None:
+def test_build_decider_fallback_none_wraps_primary_in_solo_decider_not_fallback_decider() -> None:
+    # Regression: fallback='none' must mean "no fallback", not "fall back to NoneDecider". A
+    # FallbackDecider whose fallback is NoneDecider turns a primary exception into a *successful*
+    # all-clear Decision (error=None, latency 0ms) — exactly the false "all clear" this fixes.
     decider = build_decider(
         primary="llm",
         fallback="none",
@@ -318,6 +355,21 @@ def test_build_decider_wraps_non_none_primary_in_fallback_decider() -> None:
         openai_api_key="sk-test",
         openai_base_url="https://api.openai.com/v1",
         typesafe_api_key=None,
+    )
+    assert isinstance(decider, SoloDecider)
+    assert not isinstance(decider, FallbackDecider)
+
+
+def test_build_decider_wraps_non_none_primary_in_fallback_decider_when_fallback_is_llm() -> None:
+    decider = build_decider(
+        primary="jev",
+        fallback="llm",
+        timeout_s=1.0,
+        jev_model="jev-latest",
+        llm_model="gpt-5.4-mini",
+        openai_api_key="sk-test",
+        openai_base_url="https://api.openai.com/v1",
+        typesafe_api_key="ts-test",
     )
     assert isinstance(decider, FallbackDecider)
 
