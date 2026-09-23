@@ -1,0 +1,26 @@
+# Coder Gateway configuration. Paths are relative to this file.
+# Secrets come from the environment (.env.local, then .env): OPENAI_API_KEY, TYPESAFE_API_KEY.
+upstream:
+  base_url: https://api.openai.com/v1
+
+decider:
+  primary: jev          # jev | llm | none
+  fallback: llm         # llm | none
+  timeout_s: 3.0        # per Decider call (primary and fallback each)
+  strategy: full               # full | last_10 | last_10_truncated (see docs/DECISIONS.md #17)
+  jev_model: jev-latest
+  llm_model: gpt-5.4-mini
+
+# Every event is also appended here as one JSON line.
+events_path: ../var/events.jsonl
+
+virtual_models:
+  - name: fwd-coder
+    api_key: sk-gw-fwd-demo
+    upstream_model: gpt-5.4
+    system_prompt: >-
+      You work for a team with an agreed way of working. Follow the team workflow:
+      work starts from an issue, code changes follow a discussed spec or plan, and a pull request
+      is only opened after the tests have run green. When the Gateway asks the developer a
+      question, respect the developer's answer and continue accordingly.
+    workflow: ../workflows/fwd-default.yaml

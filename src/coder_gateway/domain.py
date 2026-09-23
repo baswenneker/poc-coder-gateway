@@ -115,7 +115,8 @@ class DecisionInput:
     workflow: WorkflowDefinition
     transcript: list[Message]
     # Structured state the Gateway knows about the Conversation, e.g.
-    # {"turn": 3, "active_flags": ["no_spec"], "proposals": [{"rule_id": ..., "status": "declined", "turn": 2}]}
+    # {"turn": 3, "active_flags": ["no_spec"],
+    #  "proposals": [{"rule_id": ..., "status": "declined", "turn": 2}]}
     state: dict[str, Any] = field(default_factory=dict)
 
 

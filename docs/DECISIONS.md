@@ -71,3 +71,44 @@ Als `decider.decide()` een exception gooit of een `Decision` met `error` terugge
 benchmark dat als `errors`, apart van de accuracy-teller (die alleen over geslaagde calls gaat).
 Een kapotte call zou anders de accuracy kunstmatig verlagen en het verschil tussen "Decider gaf het
 verkeerde antwoord" en "Decider gaf helemaal geen antwoord" verdoezelen.
+
+## 11. Een Proposal die niet beantwoord wordt, telt als afgewezen
+Toont de Gateway een Proposal via de `question`-tool en begint de Developer een nieuwe Turn zonder
+tool-result voor die vraag (bijvoorbeeld afgebroken), dan zet de Gateway de Proposal op `declined`
+(event `proposal_expired`). Anders blijft hij eeuwig open en komt hij nooit meer terug.
+Een Proposal die met iets anders dan ja/nee is beantwoord (`answered`) telt ook als afgewezen: hij
+mag terugkomen zolang de Rule gebroken blijft.
+
+## 12. Een afgewezen Proposal komt pas terug in de Turn ná het antwoord
+In tekst-modus komt het antwoord ("nee") pas in de volgende Turn binnen. Zonder deze regel zou de
+Gateway in diezelfde Turn meteen opnieuw vragen. Daarom: niet opnieuw voorstellen in de Turn waarin
+de Proposal beantwoord is. Ook geldt maximaal één Proposal per Turn per Conversation, over alle
+Rules heen.
+
+## 13. Alleen Rules met ingreep `flag` worden een Flag
+Een gebroken `propose`- of `block`-Rule leidt tot een Proposal of Block, niet tot een Flag. De
+Decision zelf (alle kansen) staat wel in de read-API (`last_decision`) en op het dashboard. Een
+mislukte Decision laat bestaande Flags staan.
+
+## 14. Titel-requests krijgen ook `max_completion_tokens`, maar geen system prompt
+Requests zonder `tools` gaan ongewijzigd door (#2), behalve het model en `max_tokens` →
+`max_completion_tokens`: gpt-5.x weigert `max_tokens`, dus zonder die omzetting faalt de titel.
+Het system prompt van het Virtual Model gaat alleen mee met agent-requests.
+
+## 15. Timeout rond de hele Decision is 2 × `timeout_s` + 0,5 s
+`timeout_s` geldt per Decider-call (Jev, daarna de LLM-terugval). De Gateway zet er zelf nog een
+buitenste timeout omheen die ruimte laat voor beide calls. Loopt die af, dan fail-open (#5).
+
+## 16. Proposal-nummer overleeft een herstart
+`gateway_proposal_<n>`: n is één hoger dan het hoogste nummer in de store óf in de berichten van de
+request. Na een herstart van de Gateway (store is in-memory) ontstaan zo geen dubbele tool-call-ids.
+Live getest: OpenAI accepteert een eerdere `gateway_proposal_1`-tool-call met tool-result in de
+geschiedenis.
+
+## 17. Standaardstrategie `full`, timeout per Decider 3 s
+De benchmark (18 testgesprekken, Jev) gaf: hele conversatie 94% goed, laatste 10 berichten 83%,
+laatste 10 met ingekorte tool-output 89%. De fouten bij de kortere strategieën zitten in lange
+gesprekken waar het issue of de spec vroeg genoemd is. Jev gebruikte bij `full` gemiddeld ~1.400
+input-tokens, dus de kosten blijven klein. Daarom staat `config/gateway.yaml` op `full`. De
+gemiddelde latency was ~0,9 s met een p95 van ~2,3 s; een timeout van 1,5 s zou dus vaak naar de
+terugval springen. De timeout per Decider-call staat daarom op 3 s. Resultaten: `var/benchmark/`.
