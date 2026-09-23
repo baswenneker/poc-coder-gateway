@@ -111,12 +111,15 @@ async def test_fallback_runs_fallback_when_primary_raises() -> None:
     assert decision.decider == "fallback"
 
 
-async def test_fallback_runs_fallback_when_primary_times_out() -> None:
+async def test_fallback_runs_fallback_when_primary_times_out(caplog: pytest.LogCaptureFixture) -> None:
     primary = _StubDecider("primary", decision=_decision("primary"), delay=0.5)
     fallback = _StubDecider("fallback", decision=_decision("fallback"))
     decider = FallbackDecider(primary, fallback, timeout_s=0.01)
-    decision = await decider.decide(_input())
+    with caplog.at_level("WARNING", logger="coder_gateway.deciders"):
+        decision = await decider.decide(_input())
     assert decision.decider == "fallback"
+    # Seen live: Jev once took > 3 s; without this warning the switch to the fallback was invisible.
+    assert "decider primary failed" in caplog.text and "trying fallback" in caplog.text
 
 
 async def test_fallback_fails_open_when_both_fail() -> None:

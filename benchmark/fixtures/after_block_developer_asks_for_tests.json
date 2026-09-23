@@ -1,0 +1,27 @@
+{
+  "name": "after_block_developer_asks_for_tests",
+  "description": "Seen live with opencode: the Gateway blocked a PR request, then the Developer followed the advice and asked to run the tests. The earlier PR request is still in the conversation, but the latest message asks for something else, so block_pr_without_tests must NOT fire (otherwise the Block locks the Conversation).",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "Issue #7, zie SPEC.md: ik heb multiply toegevoegd. Maak nu een pull request aan met gh pr create."
+    },
+    {
+      "role": "assistant",
+      "content": "De Gateway blokkeert dit verzoek: er wordt een pull request aangemaakt, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging. Draai eerst de tests en laat zien dat ze slagen; vraag daarna opnieuw om de pull request."
+    },
+    {
+      "role": "user",
+      "content": "Draai eerst de tests met pytest."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": false
+  }
+}

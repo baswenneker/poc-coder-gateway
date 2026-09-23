@@ -171,6 +171,21 @@ async def test_title_request_passthrough_without_decision() -> None:
     assert h.store.list_conversations() == []
 
 
+async def test_subagent_request_passthrough_without_decision() -> None:
+    # opencode's `task` tool starts a subagent session; its requests carry x-parent-session-id
+    # (captured live with opencode 1.18.32). The main agent talks there, not the Developer.
+    decider = FakeDecider(make_decision("propose_issue", "block_pr_without_tests"))
+    h = Harness(decider)
+    headers = {**AUTH, "x-session-id": "ses_child", "x-parent-session-id": "ses_parent"}
+    r = await h.client.post(
+        "/v1/chat/completions", json=agent_body(user("Zoek calc.py"), question_tool=False), headers=headers
+    )
+    assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"] == "upstream"
+    assert decider.inputs == []
+    assert h.store.list_conversations() == []
+    assert h.upstream.requests[0]["messages"][0] == {"role": "system", "content": "Follow the team workflow."}
+
+
 async def test_forward_rewrites_request_and_uses_upstream_key() -> None:
     decider = FakeDecider()
     h = Harness(decider)

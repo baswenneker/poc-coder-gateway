@@ -22,10 +22,43 @@ def test_parse_tool_answer() -> None:
     assert parse_tool_answer('"q?"="eerst de spec"', SPEC) is ProposalStatus.ANSWERED
 
 
+# Real tool results from opencode 1.18.32 (captured live via `opencode serve`, docs/e2e-opencode.md).
+_REAL_Q = (
+    "Er is nog geen issue genoemd voor dit werk. Zullen we eerst een issue aanmaken, "
+    "zodat het werk traceerbaar is?"
+)
+
+
+def _opencode_answer(value: str, question: str = _REAL_Q) -> str:
+    return (
+        f'User has answered your questions: "{question}"="{value}". '
+        "You can now continue with the user's answers in mind."
+    )
+
+
+def test_parse_tool_answer_real_opencode_format() -> None:
+    assert parse_tool_answer(_opencode_answer("Ja, maak een issue"), SPEC) is ProposalStatus.ACCEPTED
+    assert parse_tool_answer(_opencode_answer("Nee, ga door"), SPEC) is ProposalStatus.DECLINED
+    assert parse_tool_answer(_opencode_answer("Eerst de spec schrijven"), SPEC) is ProposalStatus.ANSWERED
+    # Multi-select: both labels in one value.
+    both = _opencode_answer("Ja, maak een issue, Nee, ga door")
+    assert parse_tool_answer(both, SPEC) is ProposalStatus.ANSWERED
+    assert parse_tool_answer("The user dismissed this question", SPEC) is ProposalStatus.DECLINED
+
+
+def test_parse_tool_answer_ignores_labels_in_question_text() -> None:
+    question = "Nee, ga door is ook goed. Zullen we eerst een issue aanmaken?"
+    answer = _opencode_answer("Ja, maak een issue", question=question)
+    assert parse_tool_answer(answer, SPEC) is ProposalStatus.ACCEPTED
+
+
 def test_parse_text_answer() -> None:
     for text in ("ja", "Yes please", "ok.", "y", "Ja, maak een issue"):
         assert parse_text_answer(text, SPEC) is ProposalStatus.ACCEPTED, text
-    for text in ("nee", "No thanks", "n", "nee, ga door"):
+    # `opencode run "nee, ga maar door"` sends the message wrapped in double quotes.
+    for text in ('"ja"', '"Ja, maak een issue"'):
+        assert parse_text_answer(text, SPEC) is ProposalStatus.ACCEPTED, text
+    for text in ("nee", "No thanks", "n", "nee, ga door", '"nee, ga maar door"'):
         assert parse_text_answer(text, SPEC) is ProposalStatus.DECLINED, text
     for text in ("yesterday it broke", "niet nu, eerst lunch", ""):
         assert parse_text_answer(text, SPEC) is ProposalStatus.ANSWERED, text

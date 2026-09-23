@@ -31,13 +31,13 @@ workflow. Drie ingrepen: flag, injectie, blokkade.
 
 ## Todo
 - [ ] Benchmarkscript: strategieën voor Jev-state vergelijken op fixtures met ground truth
-- [ ] End-to-end test met opencode als client (provider-config, scenario voor propose/flag/block)
+- [x] End-to-end test met opencode als client (provider-config, scenario voor propose/flag/block) — zie `docs/e2e-opencode.md`
 - [ ] Configuratieformaat van workflow-definitie uitwerken (fases, regels, ingreep per regel)
 - [x] Techstack: Python + uv, FastAPI, streaming (SSE). Upstream OpenAI. Jev via typesafe-sdk.
 - [ ] Jev toetsen (key is er): classificeert het transcript betrouwbaar naar {none, propose_issue, flag_no_spec, block_pr}?
 - [ ] Fallback als Jev niet beschikbaar is: klein LLM met structured output (zelfde enum)
 - [ ] Fingerprint-functie voor conversatie-identificatie
-- [ ] Skill voor coding agent die de read-API bevraagt
+- [x] Skill voor coding agent die de read-API bevraagt — `skills/gateway-status/`
 
 ## Benchmark: wat krijgt Jev als state?
 Repeatable script (`uv run benchmark`) dat per strategie de Jev-kansen meet op een vaste set

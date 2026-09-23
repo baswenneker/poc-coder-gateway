@@ -32,6 +32,9 @@ from coder_gateway.upstream import Upstream
 
 log = logging.getLogger("coder_gateway")
 
+# opencode sets this header on requests of a subagent session (e.g. the `explore` agent via `task`).
+SUBAGENT_HEADER = "x-parent-session-id"
+
 StrategyFn = Callable[[list[Message], str], list[Message]]
 
 
@@ -169,6 +172,14 @@ def create_app(
             # Side requests such as opencode's title generation: no Decision (DECISIONS.md #2).
             log.info("vm=%s passthrough (no tools) stream=%s", vm.name, bool(body.get("stream")))
             return await upstream.forward(body, vm, inject_system_prompt=False)
+
+        parent = request.headers.get(SUBAGENT_HEADER)
+        if parent:
+            # opencode subagent (task tool): the main agent talks here, not the Developer. No Decision,
+            # no Conversation of its own (DECISIONS.md #20).
+            stream = bool(body.get("stream"))
+            log.info("vm=%s passthrough (subagent of %s) stream=%s", vm.name, parent, stream)
+            return await upstream.forward(body, vm)
 
         conv = store.get_or_create(vm.name, conversation_id(request.headers, messages))
         store.begin_request(conv, len(user_messages(messages)))

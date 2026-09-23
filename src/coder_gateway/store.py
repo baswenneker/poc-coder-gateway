@@ -51,25 +51,51 @@ _TEXT_ACCEPT = {"ja", "yes", "ok", "okay", "y", "j"}
 _TEXT_DECLINE = {"nee", "no", "n"}
 
 
-def parse_tool_answer(content: str, spec: ProposalSpec) -> ProposalStatus:
-    """Interpret opencode's `question` tool result. Its exact format is not pinned down, so be generous:
-    the accept/decline label anywhere in the text (case-insensitive) decides; a dismissed question
-    counts as declined; anything else is a free-form answer."""
-    text = content.lower()
+# opencode 1.18's `question` tool result (captured live, see docs/e2e-opencode.md):
+#   User has answered your questions: "<question>"="<label>". You can now continue with ...
+# Several selected labels end up in one value, joined with ", ". A dismissed question gives
+#   The user dismissed this question
+_OPENCODE_ANSWERED = "user has answered your questions:"
+_OPENCODE_ANSWER_VALUE = re.compile(r'"="(.*?)"(?=, "|\.\s|\.?$)', re.DOTALL)
+
+
+def _classify_labels(text: str, spec: ProposalSpec) -> ProposalStatus | None:
     has_accept = spec.accept_label.lower() in text
     has_decline = spec.decline_label.lower() in text
     if has_accept and not has_decline:
         return ProposalStatus.ACCEPTED
     if has_decline and not has_accept:
         return ProposalStatus.DECLINED
-    if not has_accept and any(word in text for word in _DISMISSED):
+    return None
+
+
+def parse_tool_answer(content: str, spec: ProposalSpec) -> ProposalStatus:
+    """Interpret opencode's `question` tool result. For opencode's known format only the answer
+    value(s) after `"<question>"=` count, so words in the question text cannot tip the result.
+    Other formats: the accept/decline label anywhere in the text (case-insensitive) decides; a
+    dismissed question counts as declined; anything else is a free-form answer."""
+    text = content.lower()
+    if text.lstrip().startswith(_OPENCODE_ANSWERED):
+        values = _OPENCODE_ANSWER_VALUE.findall(content)
+        if values:
+            answer = " | ".join(v.strip().lower() for v in values)
+            if answer == spec.accept_label.lower():
+                return ProposalStatus.ACCEPTED
+            if answer == spec.decline_label.lower():
+                return ProposalStatus.DECLINED
+            return _classify_labels(answer, spec) or ProposalStatus.ANSWERED
+    status = _classify_labels(text, spec)
+    if status is not None:
+        return status
+    if spec.accept_label.lower() not in text and any(word in text for word in _DISMISSED):
         return ProposalStatus.DECLINED
     return ProposalStatus.ANSWERED
 
 
 def parse_text_answer(content: str, spec: ProposalSpec) -> ProposalStatus:
-    """Interpret the Developer's next message after a text-mode Proposal (ja/yes/ok/y vs nee/no/n)."""
-    stripped = content.strip().lower()
+    """Interpret the Developer's next message after a text-mode Proposal (ja/yes/ok/y vs nee/no/n).
+    Leading quotes and punctuation are ignored: `opencode run "nee"` sends the message as '"nee"'."""
+    stripped = re.sub(r"^[\W_]+", "", content.strip().lower())
     if stripped.startswith(spec.accept_label.lower()):
         return ProposalStatus.ACCEPTED
     if stripped.startswith(spec.decline_label.lower()):

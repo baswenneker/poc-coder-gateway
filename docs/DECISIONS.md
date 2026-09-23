@@ -137,3 +137,44 @@ exception/timeout faalt hij open (geen gebroken Rules), mét `error` gezet en `l
 mislukte poging. `build_decider` gebruikt `SoloDecider` wanneer `fallback="none"` en `primary !=
 "none"`. De Gateway zelf (`config/gateway.yaml`: `fallback: llm`) blijft ongewijzigd via
 `FallbackDecider` lopen, en blijft dus fail-open op dezelfde manier als voorheen (#5).
+
+## 20. Requests van een opencode-subagent gaan door zonder Decision
+De `task`-tool van opencode start een subagent (bijvoorbeeld `explore`) met een eigen sessie. Die
+requests hebben de header `x-parent-session-id` (live gezien in opencode 1.18.32). Daar praat het
+hoofdmodel met de subagent, niet de Developer. Een Proposal in tekst-modus zou dan door het
+hoofdmodel beantwoord worden. Ook toonde `/gateway/status` soms de subagent als laatste
+Conversation. Daarom: bij `x-parent-session-id` stuurt de Gateway de request door, met het system
+prompt van het Virtual Model, maar zonder Decision en zonder eigen Conversation. Het resultaat van
+de subagent komt als tool-result terug in de Conversation van de Developer; daar valt de Decision
+wel. Beperking: een `gh pr create` in een subagent ziet de Gateway niet.
+
+## 21. De Block-Rule kijkt naar het laatste bericht
+Live gezien: na een Block vroeg de Developer "Draai eerst de tests". Jev zag het eerdere PR-verzoek
+nog in het gesprek en blokkeerde opnieuw (in de benchmark gaf de oude tekst 0,65, live boven de
+drempel van 0,7). De Developer kon de tests zo nooit laten draaien. De `broken_when` van
+`block_pr_without_tests` in `workflows/fwd-default.yaml` noemt nu expliciet het laatste bericht van
+de Developer (of de laatste `gh pr create` van het model). `ok_when` zegt dat een eerder PR-verzoek
+niet telt als het laatste bericht iets anders vraagt. Nieuwe fixture:
+`benchmark/fixtures/after_block_developer_asks_for_tests.json` (nu 0,03). De benchmark op `full`
+bleef voor deze Rule op 100%. De keuze ligt in de Rule-tekst, niet in de code: een team kan het
+per Rule anders willen.
+
+## 22. Antwoord op een Proposal: het echte opencode-formaat
+De tool-result van opencode's `question`-tool is (live afgevangen):
+`User has answered your questions: "<vraag>"="<antwoord>". You can now continue with the user's
+answers in mind.` Wegklikken geeft `The user dismissed this question`. Meerdere gekozen labels
+staan in één waarde, gescheiden door ", ". `parse_tool_answer` leest bij dit formaat alleen de
+waarde na `"<vraag>"=`. Zo kan een label in de vraagtekst de uitkomst niet beïnvloeden. Exact het
+accept-label is `accepted`, exact het decline-label is `declined`, al het andere is `answered`
+(telt als afgewezen, #11). Andere formaten gebruiken de oude, ruime regel.
+In tekst-modus zet `opencode run` een bericht met spaties tussen aanhalingstekens (`"nee, ga
+door"`). `parse_text_answer` negeert daarom leestekens aan het begin.
+
+## 23. Skill `gateway-status` staat in `skills/` en gaat per project naar `.opencode/skills/`
+Opencode vindt skills in `.opencode/skills/<naam>/SKILL.md` van het project (en globaal in onder
+meer `~/.claude/skills` en `~/.agents/skills`). De skill hoort bij de Gateway, niet bij één
+project. Daarom staat het origineel in `skills/gateway-status/` van deze repo, en kopieert
+`scripts/setup-demo.sh` hem naar `.opencode/skills/` van het demo-project. De skill roept een
+klein script aan (`curl` plus `python3`), met `CODER_GATEWAY_URL` en `CODER_GATEWAY_KEY` als
+instelling. Het script toont de laatst actieve Conversation van de API key via `/gateway/status`.
+De skill weet zijn eigen sessie-id niet, dus een filter per sessie zit er niet in.

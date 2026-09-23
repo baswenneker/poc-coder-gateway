@@ -9,9 +9,12 @@ blocks the Developer.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 
 from coder_gateway.domain import Decider, Decision, DecisionInput, RuleVerdict
+
+log = logging.getLogger("coder_gateway.deciders")
 
 
 class NoneDecider:
@@ -53,6 +56,13 @@ class FallbackDecider:
             return await asyncio.wait_for(self._primary.decide(inp), timeout=self._timeout_s)
         except Exception as primary_error:  # noqa: BLE001 - any primary failure triggers fallback
             primary_elapsed_ms = (time.perf_counter() - start) * 1000
+            log.warning(
+                "decider %s failed after %.0fms (%r); trying %s",
+                self._primary.name,
+                primary_elapsed_ms,
+                primary_error,
+                self._fallback.name,
+            )
             try:
                 return await asyncio.wait_for(self._fallback.decide(inp), timeout=self._timeout_s)
             except Exception as fallback_error:  # noqa: BLE001 - both failed: fail open
