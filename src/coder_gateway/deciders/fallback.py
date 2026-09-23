@@ -1,0 +1,63 @@
+"""Deciders that never leave the Gateway without a Decision: NoneDecider and FallbackDecider.
+
+See docs/DECISIONS.md #5: the Decision sits synchronously in the request path with a timeout;
+if the primary Decider fails or times out, a fallback Decider is tried; if that also fails, the
+Gateway fails open (a Decision with no broken Rules and `error` set), so a broken Decider never
+blocks the Developer.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+
+from coder_gateway.domain import Decider, Decision, DecisionInput, RuleVerdict
+
+
+class NoneDecider:
+    """Instant Decider that reports every Rule as not broken. Used as `primary='none'`, as the
+    terminal fallback, and in tests.
+    """
+
+    name = "none"
+
+    async def decide(self, inp: DecisionInput) -> Decision:
+        verdicts = {
+            rule.id: RuleVerdict(rule_id=rule.id, probability=0.0, broken=False)
+            for rule in inp.workflow.rules
+        }
+        return Decision(verdicts=verdicts, decider=self.name, latency_ms=0.0)
+
+
+def _fail_open(inp: DecisionInput, decider_name: str, error: str) -> Decision:
+    verdicts = {
+        rule.id: RuleVerdict(rule_id=rule.id, probability=0.0, broken=False) for rule in inp.workflow.rules
+    }
+    return Decision(verdicts=verdicts, decider=decider_name, latency_ms=0.0, error=error)
+
+
+class FallbackDecider:
+    """Runs `primary` with a timeout; on exception or timeout runs `fallback` (also timed out).
+    If both fail, fails open: a Decision with no broken Rules and `error` set.
+    """
+
+    def __init__(self, primary: Decider, fallback: Decider, timeout_s: float) -> None:
+        self._primary = primary
+        self._fallback = fallback
+        self._timeout_s = timeout_s
+        self.name = f"fallback({primary.name}->{fallback.name})"
+
+    async def decide(self, inp: DecisionInput) -> Decision:
+        start = time.perf_counter()
+        try:
+            return await asyncio.wait_for(self._primary.decide(inp), timeout=self._timeout_s)
+        except Exception as primary_error:  # noqa: BLE001 - any primary failure triggers fallback
+            primary_elapsed_ms = (time.perf_counter() - start) * 1000
+            try:
+                return await asyncio.wait_for(self._fallback.decide(inp), timeout=self._timeout_s)
+            except Exception as fallback_error:  # noqa: BLE001 - both failed: fail open
+                error = (
+                    f"primary {self._primary.name!r} failed after {primary_elapsed_ms:.0f}ms: "
+                    f"{primary_error!r}; fallback {self._fallback.name!r} failed: {fallback_error!r}"
+                )
+                return _fail_open(inp, self.name, error)
