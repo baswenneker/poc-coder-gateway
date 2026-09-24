@@ -11,6 +11,7 @@ conversation, and steers it towards your team's workflow — without anyone conf
 ![OpenAI-compatible](https://img.shields.io/badge/API-OpenAI--compatible-412991)
 ![Tested with opencode](https://img.shields.io/badge/tested%20with-opencode-black)
 ![Status: prototype](https://img.shields.io/badge/status-prototype-orange)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 [Why](#why) · [See it in action](#see-it-in-action) · [How it works](#how-it-works) ·
 [Quickstart](#quickstart) · [Write your own rules](#write-your-own-rules) · [Benchmark](#benchmark) ·
@@ -41,8 +42,7 @@ that the team owns.
 
 ## See it in action
 
-Real output from an end-to-end run with [opencode](https://opencode.ai) and `gpt-5.4`
-([full log](docs/e2e-opencode.md)).
+Real output from an end-to-end run with [opencode](https://opencode.ai) and `gpt-5.4`.
 
 **A Proposal after the work is done** — the Developer asked for a feature without mentioning an issue:
 
@@ -256,7 +256,7 @@ the Gateway sends the full conversation by default. Details per fixture are in
 
 This is a working **prototype**, built to test one idea: *can a gateway give developers a
 well-configured coding agent without them configuring anything?* It is tested end-to-end with
-opencode and reviewed three times by Codex ([docs/reviews/](docs/reviews/)). Things to know:
+opencode and has been through three adversarial code reviews. Things to know:
 
 - State lives in memory; a restart forgets Conversations (events stay in `var/events.jsonl`).
 - The Gateway binds to `127.0.0.1` by default. Set `dashboard_token` in `config/gateway.yaml`
@@ -270,11 +270,8 @@ opencode and reviewed three times by Codex ([docs/reviews/](docs/reviews/)). Thi
 |---|---|
 | [CONTEXT.md](CONTEXT.md) | The domain language: Gateway, Turn, Rule, Flag, Proposal, Block, … |
 | [TESTING.md](TESTING.md) | Step-by-step manual test of the three scenarios |
-| [docs/e2e-opencode.md](docs/e2e-opencode.md) | End-to-end test with opencode and what we saw live |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Every design decision and why |
-| [docs/reviews/](docs/reviews/) | Three Codex reviews with the follow-up per finding |
 | [benchmark/README.md](benchmark/README.md) | Fixture format and ground truth per fixture |
-| [PLAN.md](PLAN.md) | The original plan and its progress |
 
 ## Development
 
@@ -289,6 +286,12 @@ uv run ruff format --check src tests    # formatting
 The code lives in [`src/coder_gateway/`](src/coder_gateway/): `app.py` (FastAPI routes),
 `reply.py` (reading and amending streamed replies), `interventions.py`, `store.py` (Conversation
 state), `deciders/` (Jev, LLM, fallback chain) and `benchmark.py`.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE). You may use, modify and distribute this code,
+also commercially. If you distribute it or a derivative work, you must keep the copyright notice
+and include the [NOTICE](NOTICE) file, which credits the original author.
 
 ---
 

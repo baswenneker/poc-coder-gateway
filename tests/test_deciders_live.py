@@ -3,7 +3,7 @@
 Deselected by default (`addopts = "-m 'not live'"` in pyproject.toml); run with:
     uv run pytest -m live -q
 
-Needs TYPESAFE_API_KEY and OPENAI_API_KEY, loaded from .env.local (see PLAN.md / task brief).
+Needs TYPESAFE_API_KEY and OPENAI_API_KEY, loaded from .env.local (see .env.example).
 Three hand-written transcripts with a known expected outcome per Rule, taken from the task brief:
 (a) code change requested, no issue mentioned -> propose_issue & flag_no_spec broken
 (b) issue referenced and SPEC.md read before implementing -> neither broken

@@ -1,7 +1,15 @@
 # Benchmark fixtures
 
-Fixtures for `uv run benchmark` (see `src/coder_gateway/benchmark.py` and the
-"Benchmark: what state does Jev get?" section of `PLAN.md`).
+Fixtures for `uv run benchmark` (see `src/coder_gateway/benchmark.py`). The benchmark measures
+how well the Decider judges each Rule when it sees a reduced Transcript. Strategies:
+
+1. `full`: the whole conversation
+2. `last_10`: only the last 10 messages
+3. `last_10_truncated`: the last 10 messages in full, tool results before that replaced by `<truncated>`
+4. `summary_last_10` (not implemented yet): a summary plus the last 10 messages
+
+Output per strategy: accuracy per Rule at the configured threshold, average latency and tokens per
+call. The script picks nothing; it reports.
 
 ## Format
 

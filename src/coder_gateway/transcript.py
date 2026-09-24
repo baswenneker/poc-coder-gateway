@@ -12,7 +12,7 @@ from typing import Any
 
 from coder_gateway.domain import Message
 
-# 'summary_last_10' is reserved for later (PLAN.md: "later" strategy, LLM-generated summary of
+# 'summary_last_10' is reserved for later (an LLM-generated summary of
 # everything before the last 10 messages). Not implemented yet: apply_strategy raises for it.
 STRATEGIES: tuple[str, ...] = ("full", "last_10", "last_10_truncated", "summary_last_10")
 
@@ -67,7 +67,7 @@ def apply_strategy(messages: list[Message], strategy: str) -> list[Message]:
     if strategy not in STRATEGIES:
         raise ValueError(f"unknown transcript strategy: {strategy!r}")
     if strategy == "summary_last_10":
-        raise NotImplementedError("'summary_last_10' is a placeholder for later (see PLAN.md)")
+        raise NotImplementedError("'summary_last_10' is a placeholder for later (see benchmark/README.md)")
 
     non_system = [m for m in messages if _is_non_system(m)]
 

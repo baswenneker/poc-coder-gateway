@@ -1,6 +1,6 @@
 """Benchmark: compare transcript strategies against fixed fixtures with known ground truth.
 
-See PLAN.md, section "Benchmark: wat krijgt Jev als state?". The script chooses nothing,
+See benchmark/README.md for the strategies and fixtures. The script chooses nothing,
 it only reports: per strategy, how well the configured Decider recovers the ground-truth
 verdict for each Rule when it only sees the transcript reduced by that strategy.
 

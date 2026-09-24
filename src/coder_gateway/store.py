@@ -55,7 +55,7 @@ _TEXT_ACCEPT = {"ja", "yes", "ok", "okay", "y", "j"}
 _TEXT_DECLINE = {"nee", "no", "n"}
 
 
-# opencode 1.18's `question` tool result (captured live, see docs/e2e-opencode.md):
+# opencode 1.18's `question` tool result (captured live):
 #   User has answered your questions: "<question>"="<label>". You can now continue with ...
 # Several selected labels end up in one value, joined with ", ". A dismissed question gives
 #   The user dismissed this question

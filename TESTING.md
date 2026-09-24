@@ -1,7 +1,7 @@
 # Manual testing
 
 These steps get the Gateway running with opencode. You will see the three Interventions: Proposal, Flag and
-Block. The Gateway decides at the end of a Turn, and when the model wants to create a PR or push. Allow about 20 minutes. Background and live results: `docs/e2e-opencode.md`.
+Block. The Gateway decides at the end of a Turn, and when the model wants to create a PR or push. Allow about 20 minutes.
 
 ## 1. Preparation
 

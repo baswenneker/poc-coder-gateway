@@ -23,7 +23,7 @@ def test_parse_tool_answer() -> None:
     assert parse_tool_answer('"q?"="spec first"', SPEC) is ProposalStatus.ANSWERED
 
 
-# Real tool results from opencode 1.18.32 (captured live via `opencode serve`, docs/e2e-opencode.md).
+# Real tool results from opencode 1.18.32 (captured live via `opencode serve`).
 _REAL_Q = (
     "No issue has been mentioned for this work yet. Shall we create an issue first, so the work is traceable?"
 )
