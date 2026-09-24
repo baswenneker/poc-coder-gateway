@@ -154,7 +154,7 @@ def test_text_amendment_without_model_text_has_no_leading_blank_line() -> None:
     assert proposal_text_amendment(SPEC, "x").append_text.startswith("\n\n")
 
 
-# --- Codex review 3 ------------------------------------------------------------------------------------
+# --- Edge cases ---------------------------------------------------------------------------------------------
 
 
 def _chunk(index: int, delta: dict[str, object], finish: str | None = None) -> bytes:

@@ -5,6 +5,15 @@ description = "OpenAI-compatible gateway that steers coding-agent conversations 
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Bas Wenneker" }]
+readme = "README.md"
+keywords = ["coding-agent", "llm", "gateway", "openai", "opencode", "developer-workflow", "guardrails"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
@@ -15,6 +24,9 @@ dependencies = [
     "typesafe-sdk>=0.7.1",
     "uvicorn[standard]>=0.53.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/baswenneker/poc-coder-gateway"
 
 [project.scripts]
 coder-gateway = "coder_gateway.cli:main"

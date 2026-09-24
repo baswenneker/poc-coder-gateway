@@ -444,7 +444,7 @@ async def test_proposal_text_mode_answer_in_next_turn() -> None:
 
 
 async def test_text_proposal_answered_after_history_compaction() -> None:
-    # Codex review 1, finding 3: the client compacts the history, so it carries fewer user messages
+    # DECISIONS.md #25: the client compacts the history, so it carries fewer user messages
     # than before. A new Developer message must still start a new Turn and settle the Proposal.
     h = Harness(FakeDecider(make_decision("propose_issue")))
     history: list[Message] = [user("a"), assistant("x"), user("b"), assistant("y"), user("c")]
@@ -573,7 +573,7 @@ async def test_no_decider_forwards() -> None:
 
 
 async def test_stale_request_does_not_overwrite_newer_turn() -> None:
-    # Codex review 1, finding 2: a Turn 1 reply that is still in the Decider must not restore a Flag or
+    # A Turn 1 reply that is still in the Decider must not restore a Flag or
     # record its Proposal against Turn 2. The per-Conversation lock serialises them (DECISIONS.md #24).
     class GatedDecider:
         name = "gated"
@@ -643,7 +643,7 @@ async def test_reply_of_an_older_turn_gets_no_decision() -> None:
 
 
 async def test_event_log_write_failure_does_not_abort_request(tmp_path: Path) -> None:
-    # Codex review 1, finding 5.
+    # DECISIONS.md #26.
     path = tmp_path / "events.jsonl"
     store = ConversationStore(events_path=path)
     path.mkdir()  # appending to it now fails with an OSError
@@ -686,7 +686,7 @@ async def test_dashboard_and_health() -> None:
 
 
 async def test_dashboard_token_when_configured() -> None:
-    # Codex review 1, finding 6: with `dashboard_token` set, /gateway/ needs ?token=.
+    # DECISIONS.md #27: with `dashboard_token` set, /gateway/ needs ?token=.
     h = Harness(FakeDecider(), dashboard_token="s3cret")
     assert (await h.client.get("/gateway/")).status_code == 401
     assert (await h.client.get("/gateway/?token=wrong")).status_code == 401

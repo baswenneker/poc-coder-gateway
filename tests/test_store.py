@@ -48,7 +48,7 @@ def test_parse_tool_answer_real_opencode_format() -> None:
 
 def test_parse_tool_answer_requires_exact_match_in_known_format() -> None:
     # A free-form value that merely contains the accept label must not count as accepted, or the
-    # Proposal is suppressed for good (codex-review-2, finding 1).
+    # Proposal is suppressed for good.
     answer = _opencode_answer("Not Yes, create an issue; spec first")
     assert parse_tool_answer(answer, SPEC) is ProposalStatus.ANSWERED
 
@@ -207,7 +207,7 @@ def test_decider_state_and_phase() -> None:
 
 
 def test_new_turn_when_history_shrinks() -> None:
-    # Codex review 1, finding 3: after compaction the request carries fewer user messages. A changed
+    # DECISIONS.md #25: after compaction the request carries fewer user messages. A changed
     # latest Developer message still starts a new Turn; the same one (more agent steps) does not.
     store = ConversationStore()
     conv = store.get_or_create("vm", "c")
@@ -224,7 +224,7 @@ def test_new_turn_when_history_shrinks() -> None:
 
 
 def test_event_log_write_failure_is_logged_once(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    # Codex review 1, finding 5: an unwritable events file must not break request handling.
+    # DECISIONS.md #26: an unwritable events file must not break request handling.
     path = tmp_path / "events.jsonl"
     store = ConversationStore(events_path=path)
     path.mkdir()
@@ -240,7 +240,7 @@ def test_event_log_write_failure_is_logged_once(tmp_path: Path, caplog: pytest.L
 def test_event_log_dir_creation_failure_does_not_block_startup(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # Codex review 2, finding 3: a directory that cannot be created must not stop the Gateway from
+    # DECISIONS.md #26: a directory that cannot be created must not stop the Gateway from
     # starting up; it just falls back to in-memory events.
     blocker = tmp_path / "var"
     blocker.write_text("not a directory")

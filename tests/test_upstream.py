@@ -28,7 +28,7 @@ class TrackedStream(httpx.AsyncByteStream):
 
 
 async def test_stream_closed_when_client_disconnects_before_first_chunk() -> None:
-    # Codex review 1, finding 4: sending `http.response.start` fails (client already gone), so the
+    # Sending `http.response.start` fails (client already gone), so the
     # relay generator never starts. The upstream response must be closed anyway.
     stream = TrackedStream()
 

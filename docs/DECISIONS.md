@@ -188,7 +188,7 @@ The script shows the API key's most recently active Conversation via `/gateway/s
 does not know its own session id, so there is no per-session filter.
 
 ## 24. One lock per Conversation around Decision and state update
-Codex review 1, finding 2. The handler read the Conversation, waited for the Decider and then wrote
+Found in code review. The handler read the Conversation, waited for the Decider and then wrote
 the result into whatever the state was at that moment. A slow request from Turn 1 could thus, after
 a fast request from Turn 2, restore a Flag and book its Proposal on Turn 2. Now `app.py` holds an
 `asyncio.Lock` per Conversation from `begin_request` up to and including the chosen Intervention.
@@ -199,7 +199,7 @@ one Decision (bounded by `decision_timeout_s`). Opencode sends one request per s
 anyway.
 
 ## 25. A new Turn is recognised by the last Developer message, not just by the count
-Codex review 1, finding 3. `conv.turn` was the highest number of user messages ever seen. If the
+Found in code review. `conv.turn` was the highest number of user messages ever seen. If the
 client shortened the history (compaction), the Turn stopped increasing: declined Proposals stayed
 suppressed and the text-mode answer pointed to an index in the old history. Now a new Turn starts
 when the number of user messages is greater than on the previous request, or when the last user
@@ -210,17 +210,17 @@ Limitation: if after compaction the client sends a different last user message w
 Developer saying anything (e.g. a synthetic "continue"), that counts as a new Turn.
 
 ## 26. The event log is best effort
-Codex review 1, finding 5. An error while writing to `var/events.jsonl` (disk full, no permission)
+Found in code review. An error while writing to `var/events.jsonl` (disk full, no permission)
 aborted the request, even after a fail-open Decision. The file is an aid for looking back, not part
 of the Decision. Now `ConversationStore` catches an `OSError`, logs one warning (and only again
 after a write has succeeded in between) and carries on. The events stay in memory, so the read API
 and the dashboard keep working.
-Codex review 2, finding 3: the same applies to creating the directory of `var/events.jsonl` at
+The same applies to creating the directory of `var/events.jsonl` at
 startup. If `mkdir` fails (no permission), `ConversationStore.__init__` logs one warning and the
 Gateway starts anyway, without an events file.
 
 ## 27. Dashboard: open on localhost, optionally a token
-Codex review 1, finding 6. `/gateway/` needs no API key and shows all Virtual Models. For manual
+Found in code review. `/gateway/` needs no API key and shows all Virtual Models. For manual
 testing that is convenient (browser, no header), and the Gateway binds to `127.0.0.1` by default.
 New: an optional `dashboard_token` in `config/gateway.yaml`. If it is set, the dashboard requires
 `?token=<value>` (otherwise 401). `CODER_GATEWAY_HOST` selects a different address; if that is not a
@@ -301,7 +301,7 @@ Result on `full` (21 fixtures, Jev, two runs): 100% correct, ~0.5 s on average, 
 If a request asks for more than one reply (`n > 1`), or the reply contains a choice with an index
 other than 0, the reply passes through unchanged, without a Decision. The Gateway only reads and
 modifies choice 0. With multiple choices, collecting and amending the reply got mixed up
-(Codex review 3, #1). Opencode never sends `n > 1`, so in practice this costs nothing.
+(found in code review). Opencode never sends `n > 1`, so in practice this costs nothing.
 
 ## 34. The trigger looks at the decoded arguments
 The trigger searched the JSON text of the arguments. `{"command":"git push"}`, a tab or

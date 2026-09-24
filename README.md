@@ -7,6 +7,7 @@
 An OpenAI-compatible gateway that sits between a coding agent and the model, follows every
 conversation, and steers it towards your team's workflow — without anyone configuring their agent.
 
+[![CI](https://github.com/baswenneker/poc-coder-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/baswenneker/poc-coder-gateway/actions/workflows/ci.yml)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![OpenAI-compatible](https://img.shields.io/badge/API-OpenAI--compatible-412991)
 ![Tested with opencode](https://img.shields.io/badge/tested%20with-opencode-black)
