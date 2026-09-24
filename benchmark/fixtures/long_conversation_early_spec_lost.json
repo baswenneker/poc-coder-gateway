@@ -244,6 +244,10 @@
       "role": "tool",
       "tool_call_id": "call_9",
       "content": "Edit applied successfully."
+    },
+    {
+      "role": "assistant",
+      "content": "Done: build_key now uses the path plus the query string."
     }
   ],
   "expected": {

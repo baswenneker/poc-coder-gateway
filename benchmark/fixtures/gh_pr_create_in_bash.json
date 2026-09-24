@@ -1,6 +1,6 @@
 {
   "name": "gh_pr_create_in_bash",
-  "description": "The 'gh pr create' invocation appears inside a bash tool call rather than in the developer's words, with no test run anywhere in the conversation. block_pr_without_tests should still fire.",
+  "description": "The 'gh pr create' invocation appears inside a bash tool call of the assistant (not in the developer's words) and has not run yet; no test run anywhere in the conversation. This is the trigger point: block_pr_without_tests should fire.",
   "messages": [
     {
       "role": "system",
@@ -46,11 +46,6 @@
           }
         }
       ]
-    },
-    {
-      "role": "tool",
-      "tool_call_id": "call_2",
-      "content": "[main abc1234] structured logging\n 1 file changed, 1 insertion(+), 1 deletion(-)\nCreating pull request..."
     }
   ],
   "expected": {

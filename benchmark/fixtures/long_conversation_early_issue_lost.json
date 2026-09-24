@@ -1,6 +1,6 @@
 {
   "name": "long_conversation_early_issue_lost",
-  "description": "A 27+ message conversation where the issue (JIRA-410) is only mentioned in the very first user message, followed by many rounds of unrelated file exploration and then more code edits. Ground truth is judged over the FULL transcript (issue was referenced, so propose_issue is false); a 'last_10' strategy that drops the first message would likely misjudge this one — that's the point of the fixture.",
+  "description": "A 27+ message conversation where the issue (JIRA-410) is only mentioned in the very first user message, followed by many rounds of unrelated file exploration and then more code edits. Ground truth is judged over the FULL transcript (issue was referenced, so propose_issue is false); a 'last_10' strategy that drops the first message would likely misjudge this one — that's the point of the fixture. No spec or plan file is ever discussed, so flag_no_spec fires (the earlier ground truth said false, which contradicted the Rule; every Jev run gave 0.95+).",
   "messages": [
     {
       "role": "system",
@@ -286,11 +286,15 @@
       "role": "tool",
       "tool_call_id": "call_11",
       "content": "Edit applied successfully."
+    },
+    {
+      "role": "assistant",
+      "content": "Done: the indexer now batches writes via index_batch()."
     }
   ],
   "expected": {
     "propose_issue": false,
-    "flag_no_spec": false,
+    "flag_no_spec": true,
     "block_pr_without_tests": false
   }
 }

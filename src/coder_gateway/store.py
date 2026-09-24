@@ -154,6 +154,8 @@ class Conversation:
     updated_at: str = field(default_factory=_now)
     turn: int = 0
     requests: int = 0
+    # Decider calls (Jev). Normally one per Turn plus one per triggering tool call (DECISIONS.md #28).
+    decisions: int = 0
     # The latest Developer message seen: user-message count and a hash of its text (Turn detection).
     user_count: int = 0
     last_user_hash: str = ""
@@ -167,6 +169,9 @@ class Conversation:
     def open_proposals(self) -> list[ProposalRecord]:
         return [p for p in self.proposals if p.status is ProposalStatus.OPEN]
 
+    def proposal_shown_this_turn(self) -> bool:
+        return any(p.turn == self.turn for p in self.proposals)
+
     def to_dict(self, *, include_events: bool = True) -> dict[str, Any]:
         data: dict[str, Any] = {
             "id": self.id,
@@ -175,6 +180,7 @@ class Conversation:
             "updated_at": self.updated_at,
             "turn": self.turn,
             "requests": self.requests,
+            "decisions": self.decisions,
             "phase": self.phase,
             "flags": [asdict(f) for f in self.flags.values()],
             "proposals": [asdict(p) for p in self.proposals],
@@ -337,8 +343,12 @@ class ConversationStore:
         p.answered_turn = conv.turn
         self.record_event(conv, event, proposal_id=p.id, rule_id=p.rule_id, status=str(status), answer=answer)
 
-    def set_decision(self, conv: Conversation, decision: Decision) -> dict[str, Any]:
-        conv.last_decision = decision_to_dict(decision)
+    def set_decision(
+        self, conv: Conversation, decision: Decision, reason: str | None = None
+    ) -> dict[str, Any]:
+        """Record a Decision (one Decider call) and why it was made ('end_of_turn', 'trigger:<rule>')."""
+        conv.decisions += 1
+        conv.last_decision = {**decision_to_dict(decision), "reason": reason}
         if decision.phase and decision.error is None:
             conv.phase = decision.phase
         return conv.last_decision

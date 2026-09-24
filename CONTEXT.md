@@ -9,7 +9,7 @@ Why it exists: developers get better and more consistent code without having to 
 ### Setup
 
 **Gateway**:
-The service that sits between the coding agent and the upstream model and decides for every request whether to intervene.
+The service that sits between the coding agent and the upstream model. It reads the model's replies and decides at the end of each Turn, and when the model wants to run a triggering tool call, whether to intervene.
 _Avoid_: Proxy, middleware
 
 **Virtual Model**:
@@ -21,7 +21,7 @@ The set of Rules a team wants its developers to follow, attached to a Virtual Mo
 _Avoid_: Policy, workflow config
 
 **Rule**:
-One expectation in a Workflow Definition, together with the Intervention it triggers when broken.
+One expectation in a Workflow Definition, together with the Intervention it triggers when broken. A Rule that can Block also has a trigger: a pattern on the tool calls of the model.
 _Avoid_: Check, guard
 
 ### People and conversations
@@ -49,7 +49,7 @@ _Avoid_: History, log, context
 ### Deciding and intervening
 
 **Decision**:
-The verdict, made for every request before it goes upstream, on whether a Rule is broken and which Intervention follows.
+The verdict on whether a Rule is broken and which Intervention follows. Made once at the end of a Turn, on the model's final reply, and additionally when a tool call in a reply matches a Block Rule's trigger, before the client runs it. Requests themselves go upstream without a Decision.
 _Avoid_: Observer, classification, check
 
 **Intervention**:
@@ -61,9 +61,9 @@ A visible marker on a Conversation that a Rule is currently broken, without any 
 _Avoid_: Warning, alert, violation
 
 **Proposal**:
-A suggested next step the Gateway adds to an assistant reply, which the Developer accepts, declines or answers otherwise. Shown at most once per Turn. A declined Proposal returns in the next Turn as long as its Rule stays broken.
+A suggested next step the Gateway adds to the final assistant reply of a Turn, which the Developer accepts, declines or answers otherwise. Shown at most once per Turn. A declined Proposal returns in the next Turn as long as its Rule stays broken.
 _Avoid_: Injection, suggestion, nudge
 
 **Block**:
-A refusal by the Gateway to pass a request upstream, answered with an explanation in place of the model's reply. Can happen at any request, and only where the Rule explicitly allows it.
+A refusal by the Gateway to let the coding agent run a tool call the model asked for: the tool call is left out of the reply and an explanation ends the Turn. Only for a Rule that explicitly allows it, and only when a tool call matches that Rule's trigger.
 _Avoid_: Deny, reject, stop

@@ -1,0 +1,23 @@
+{
+  "name": "pr_question_answered_in_words",
+  "description": "The developer asks how to open a pull request; the assistant only explains it in text and ends the Turn (end-of-Turn decision point). Nothing tries to create a PR and no code was changed, so nothing fires.",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are opencode, an interactive CLI tool that helps users with software engineering tasks."
+    },
+    {
+      "role": "user",
+      "content": "How do I open a pull request from this repo with the gh CLI?"
+    },
+    {
+      "role": "assistant",
+      "content": "Push your branch, then run `gh pr create --fill` (or `gh pr create --title ... --body ...`). Run the tests first so the PR is green."
+    }
+  ],
+  "expected": {
+    "propose_issue": false,
+    "flag_no_spec": false,
+    "block_pr_without_tests": false
+  }
+}

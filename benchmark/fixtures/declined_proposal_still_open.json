@@ -1,6 +1,6 @@
 {
   "name": "declined_proposal_still_open",
-  "description": "The developer already declined the propose_issue Proposal earlier in the conversation (via the question tool) and coding continued regardless. No issue was ever referenced and no spec discussed, so propose_issue and flag_no_spec should still both fire — a declined Proposal doesn't clear the underlying Rule.",
+  "description": "The developer declined the propose_issue Proposal at the end of the first Turn (via the question tool, opencode's answer format) and asked for more code changes in the next Turn. No issue was ever referenced and no spec discussed, so at the end of Turn 2 propose_issue and flag_no_spec should still both fire: a declined Proposal doesn't clear the underlying Rule.",
   "messages": [
     {
       "role": "system",
@@ -9,29 +9,6 @@
     {
       "role": "user",
       "content": "Please add input validation to the signup form, email must be a valid address."
-    },
-    {
-      "role": "assistant",
-      "content": null,
-      "tool_calls": [
-        {
-          "id": "call_1",
-          "type": "function",
-          "function": {
-            "name": "question",
-            "arguments": "{\"questions\": [{\"question\": \"Er is nog geen issue genoemd voor dit werk. Zullen we eerst een issue aanmaken?\", \"header\": \"Eerst een issue?\"}]}"
-          }
-        }
-      ]
-    },
-    {
-      "role": "tool",
-      "tool_call_id": "call_1",
-      "content": "{\"answers\": [\"Nee, ga door\"]}"
-    },
-    {
-      "role": "assistant",
-      "content": "Ok, I'll continue without an issue."
     },
     {
       "role": "assistant",
@@ -70,6 +47,56 @@
       "role": "tool",
       "tool_call_id": "call_3",
       "content": "Edit applied successfully."
+    },
+    {
+      "role": "assistant",
+      "content": "Done: validate() now checks the email address.",
+      "tool_calls": [
+        {
+          "id": "gateway_proposal_1",
+          "type": "function",
+          "function": {
+            "name": "question",
+            "arguments": "{\"questions\": [{\"question\": \"Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?\", \"header\": \"Issue aanmaken?\", \"options\": [{\"label\": \"Ja, maak een issue\", \"description\": \"Maak een issue aan voor dit werk\"}, {\"label\": \"Nee, niet nodig\", \"description\": \"Geen issue voor dit werk\"}]}]}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "gateway_proposal_1",
+      "content": "User has answered your questions: \"Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?\"=\"Nee, niet nodig\". You can now continue with the user's answers in mind."
+    },
+    {
+      "role": "assistant",
+      "content": "Ok, no issue."
+    },
+    {
+      "role": "user",
+      "content": "Also require a password of at least 12 characters."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_4",
+          "type": "function",
+          "function": {
+            "name": "edit",
+            "arguments": "{\"filePath\": \"src/signup.py\", \"oldString\": \"return EMAIL_RE.match(form['email']) is not None\", \"newString\": \"return EMAIL_RE.match(form['email']) is not None and len(form['password']) >= 12\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_4",
+      "content": "Edit applied successfully."
+    },
+    {
+      "role": "assistant",
+      "content": "Done: the password must now be at least 12 characters."
     }
   ],
   "expected": {

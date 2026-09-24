@@ -51,6 +51,10 @@
       "role": "tool",
       "tool_call_id": "call_2",
       "content": "Edit applied successfully."
+    },
+    {
+      "role": "assistant",
+      "content": "Fixed: total_pages now rounds up, so a partial last page is counted."
     }
   ],
   "expected": {

@@ -47,6 +47,10 @@
       "role": "tool",
       "tool_call_id": "call_2",
       "content": "Edit applied successfully."
+    },
+    {
+      "role": "assistant",
+      "content": "Fixed: the middleware no longer crashes when the Authorization header is missing."
     }
   ],
   "expected": {

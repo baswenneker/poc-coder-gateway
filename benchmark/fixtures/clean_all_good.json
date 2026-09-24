@@ -1,6 +1,6 @@
 {
   "name": "clean_all_good",
-  "description": "Issue referenced up front, SPEC.md read via the read tool, tests run and green after the last edit, then a PR is requested. Everything should be clean.",
+  "description": "Issue referenced up front, SPEC.md read via the read tool, tests run and green after the last edit, then a PR is requested. Everything should be clean. The fixture ends with the assistant's 'gh pr create' tool call, where the Gateway decides (trigger point).",
   "messages": [
     {
       "role": "system",
@@ -78,6 +78,20 @@
     {
       "role": "user",
       "content": "Great, please open a PR."
+    },
+    {
+      "role": "assistant",
+      "content": "Opening the pull request.",
+      "tool_calls": [
+        {
+          "id": "call_pr",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"gh pr create --title 'CSV export' --body 'Closes #312'\"}"
+          }
+        }
+      ]
     }
   ],
   "expected": {

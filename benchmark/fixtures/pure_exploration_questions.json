@@ -55,6 +55,10 @@
       "role": "tool",
       "tool_call_id": "call_2",
       "content": "src/api.py:14: client = HttpClient()"
+    },
+    {
+      "role": "assistant",
+      "content": "HttpClient is instantiated once, in src/api.py line 14."
     }
   ],
   "expected": {

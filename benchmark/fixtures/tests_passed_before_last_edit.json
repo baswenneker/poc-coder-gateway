@@ -1,6 +1,6 @@
 {
   "name": "tests_passed_before_last_edit",
-  "description": "Tests passed, but then one more code edit was made afterwards without re-running tests, before the PR request. The green run is stale, so block_pr_without_tests should fire.",
+  "description": "Tests passed, but then one more code edit was made afterwards without re-running tests, before the PR request. The green run is stale, so block_pr_without_tests should fire. The fixture ends with the assistant's 'gh pr create' tool call, where the Gateway decides (trigger point).",
   "messages": [
     {
       "role": "system",
@@ -78,6 +78,20 @@
     {
       "role": "user",
       "content": "Cool, open a PR."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_pr",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"gh pr create --fill\"}"
+          }
+        }
+      ]
     }
   ],
   "expected": {

@@ -1,6 +1,6 @@
 {
   "name": "after_block_developer_asks_for_tests",
-  "description": "Seen live with opencode: the Gateway blocked a PR request, then the Developer followed the advice and asked to run the tests. The earlier PR request is still in the conversation, but the latest message asks for something else, so block_pr_without_tests must NOT fire (otherwise the Block locks the Conversation).",
+  "description": "Seen live with opencode: the Gateway blocked a PR attempt, then the Developer followed the advice and asked to run the tests. The model ran pytest (2 passed) and ended the Turn. The earlier PR request is still in the conversation, but the latest assistant message does not try to create a PR, so block_pr_without_tests must NOT fire (otherwise the Block locks the Conversation).",
   "messages": [
     {
       "role": "system",
@@ -12,11 +12,34 @@
     },
     {
       "role": "assistant",
-      "content": "De Gateway blokkeert dit verzoek: er wordt een pull request aangemaakt, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging. Draai eerst de tests en laat zien dat ze slagen; vraag daarna opnieuw om de pull request."
+      "content": "Ik maak de pull request aan.\n\nDe Gateway heeft deze stap tegengehouden: het model wilde een pull request aanmaken of code pushen, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging. Draai eerst de tests en laat zien dat ze slagen; vraag daarna opnieuw om de pull request."
     },
     {
       "role": "user",
       "content": "Draai eerst de tests met pytest."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_t",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"pytest -q\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_t",
+      "content": "..\n2 passed in 0.01s"
+    },
+    {
+      "role": "assistant",
+      "content": "De tests zijn groen: 2 passed."
     }
   ],
   "expected": {

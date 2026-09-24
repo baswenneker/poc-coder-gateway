@@ -1,6 +1,6 @@
 {
   "name": "pr_request_in_words_dutch",
-  "description": "Dutch-language developer message asking in plain words for a pull request, with no test run shown. block_pr_without_tests should fire even though the request isn't in English or a literal 'gh pr create'.",
+  "description": "Dutch-language developer message asking in plain words for a pull request, with no test run shown; the assistant then tries 'git push' and 'gh pr create' (the trigger point). block_pr_without_tests should fire; rules must work in Dutch too.",
   "messages": [
     {
       "role": "system",
@@ -32,6 +32,20 @@
     {
       "role": "user",
       "content": "Mooi, kun je nu een pull request aanmaken?"
+    },
+    {
+      "role": "assistant",
+      "content": "Ik maak de pull request aan.",
+      "tool_calls": [
+        {
+          "id": "call_pr",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"git push -u origin excel-export && gh pr create --fill\"}"
+          }
+        }
+      ]
     }
   ],
   "expected": {

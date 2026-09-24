@@ -10,6 +10,7 @@ if not s.get("conversation"):
     sys.exit(0)
 print(f"Conversation:   {s['conversation']}")
 print(f"Turn:           {s.get('turn')}")
+print(f"Requests:       {s.get('requests')} ({s.get('decisions')} decisions)")
 print(f"Phase:          {s.get('phase') or '-'}")
 
 flags = s.get("flags") or []
@@ -32,7 +33,8 @@ if not d:
     print("Last decision:  none yet")
     sys.exit(0)
 broken = ", ".join(d.get("broken") or []) or "none"
-print(f"Last decision:  broken: {broken} ({d.get('decider')}, {d.get('latency_ms')} ms)")
+reason = d.get("reason") or "-"
+print(f"Last decision:  broken: {broken} ({reason}; {d.get('decider')}, {d.get('latency_ms')} ms)")
 for rid, v in (d.get("verdicts") or {}).items():
     print(f"  - {rid}: p={v['probability']:.2f}{' BROKEN' if v['broken'] else ''}")
 if d.get("error"):

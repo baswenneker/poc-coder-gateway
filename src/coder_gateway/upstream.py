@@ -14,6 +14,7 @@ from starlette.types import Receive, Scope, Send
 
 from coder_gateway.config import UpstreamConfig
 from coder_gateway.domain import VirtualModel
+from coder_gateway.reply import OnFinish, amend_completion, inspect_stream, reply_from_completion
 
 log = logging.getLogger("coder_gateway.upstream")
 
@@ -52,18 +53,27 @@ class Upstream:
         return headers
 
     async def forward(
-        self, body: dict[str, Any], vm: VirtualModel, *, inject_system_prompt: bool = True
+        self,
+        body: dict[str, Any],
+        vm: VirtualModel,
+        *,
+        inject_system_prompt: bool = True,
+        on_finish: OnFinish | None = None,
     ) -> Response:
+        """Forward the request. With `on_finish`, a successful reply is inspected once complete and the
+        Amendment the callback returns is applied before the client sees the end of the reply."""
         payload = rewrite_request(body, vm, inject_system_prompt=inject_system_prompt)
         url = f"{self._config.base_url}/chat/completions"
         try:
             if payload.get("stream"):
-                return await self._forward_stream(url, payload)
+                return await self._forward_stream(url, payload, on_finish)
             resp = await self._client.post(url, json=payload, headers=self._headers())
         except httpx.HTTPError as exc:
             log.warning("upstream request failed: %s", type(exc).__name__)
             return _error_response(502, f"upstream request failed: {type(exc).__name__}")
         content = resp.content
+        if resp.status_code == 200 and on_finish is not None:
+            content = await _amend_json(content, on_finish)
         if resp.status_code == 200:
             content = _rename_model(content, vm.name)
         return Response(
@@ -72,7 +82,9 @@ class Upstream:
             media_type=resp.headers.get("content-type", "application/json"),
         )
 
-    async def _forward_stream(self, url: str, payload: dict[str, Any]) -> Response:
+    async def _forward_stream(
+        self, url: str, payload: dict[str, Any], on_finish: OnFinish | None
+    ) -> Response:
         request = self._client.build_request("POST", url, json=payload, headers=self._headers())
         resp = await self._client.send(request, stream=True)
         if resp.status_code != 200:
@@ -84,7 +96,26 @@ class Upstream:
                 media_type=resp.headers.get("content-type", "application/json"),
             )
 
-        return _UpstreamStream(resp)
+        return _UpstreamStream(resp, on_finish)
+
+
+async def _amend_json(content: bytes, on_finish: OnFinish) -> bytes:
+    """Non-streamed reply: ask for an Amendment and apply it. Fail-open on anything unexpected."""
+    try:
+        data = json.loads(content)
+    except ValueError:
+        return content
+    reply = reply_from_completion(data)
+    if reply is None or reply.finish_reason is None:
+        return content
+    try:
+        amendment = await on_finish(reply)
+    except Exception:  # noqa: BLE001 - fail-open: never break the model's reply
+        log.exception("amending the upstream reply failed; passing it through unchanged")
+        return content
+    if amendment is None:
+        return content
+    return json.dumps(amend_completion(data, amendment), ensure_ascii=False).encode()
 
 
 class _UpstreamStream(StreamingResponse):
@@ -92,10 +123,11 @@ class _UpstreamStream(StreamingResponse):
     client is gone before the first chunk (sending `http.response.start` fails, so the relay never
     starts) or the request is cancelled. `httpx.Response.aclose` is idempotent."""
 
-    def __init__(self, upstream: httpx.Response) -> None:
+    def __init__(self, upstream: httpx.Response, on_finish: OnFinish | None = None) -> None:
         self._upstream = upstream
+        relay = self._relay() if on_finish is None else inspect_stream(self._relay(), on_finish)
         super().__init__(
-            self._relay(),
+            relay,
             status_code=200,
             media_type="text/event-stream",
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},

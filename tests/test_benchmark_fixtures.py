@@ -118,3 +118,17 @@ def test_validate_messages_flags_duplicate_tool_call_ids() -> None:
     ]
     problems = validate_messages(messages)
     assert any("duplicate tool_call id" in p for p in problems)
+
+
+@pytest.mark.parametrize("path", _fixture_paths(), ids=lambda p: p.stem)
+def test_fixture_ends_where_the_gateway_decides(path: Path) -> None:
+    # DECISIONS.md #28: at the end of a Turn (final assistant text) or on a triggering tool call.
+    last = load_fixture(path).messages[-1]
+    assert last["role"] == "assistant"
+    calls = last.get("tool_calls") or []
+    if calls:
+        trigger = WORKFLOW.rule("block_pr_without_tests").trigger
+        assert trigger is not None
+        assert any(trigger.matches(c["function"]["name"], c["function"]["arguments"]) for c in calls)
+    else:
+        assert last.get("content")

@@ -1,6 +1,6 @@
 {
   "name": "lint_passed_not_tests",
-  "description": "Only the linter was run and passed (plus one manual edit after that); the actual test suite was never run. block_pr_without_tests should still fire — lint is not tests.",
+  "description": "Only the linter was run and passed (plus one manual edit after that); the actual test suite was never run. block_pr_without_tests should still fire — lint is not tests. The fixture ends with the assistant's 'gh pr create' tool call, where the Gateway decides (trigger point).",
   "messages": [
     {
       "role": "system",
@@ -51,6 +51,20 @@
     {
       "role": "user",
       "content": "Great, lint is clean, open a PR."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_pr",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"gh pr create --title 'Lint fixes' --fill\"}"
+          }
+        }
+      ]
     }
   ],
   "expected": {

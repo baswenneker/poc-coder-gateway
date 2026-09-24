@@ -1,6 +1,6 @@
 {
   "name": "combination_no_issue_no_spec_pr_no_tests",
-  "description": "Worst case: no issue referenced, no spec discussed, and a PR is requested without any test run. All three rules should fire.",
+  "description": "Worst case: no issue referenced, no spec discussed, and a PR is requested without any test run. All three rules should fire. The fixture ends with the assistant's 'gh pr create' tool call, where the Gateway decides (trigger point).",
   "messages": [
     {
       "role": "system",
@@ -51,6 +51,20 @@
     {
       "role": "user",
       "content": "Perfect, open a PR for this."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_pr",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"gh pr create --fill\"}"
+          }
+        }
+      ]
     }
   ],
   "expected": {

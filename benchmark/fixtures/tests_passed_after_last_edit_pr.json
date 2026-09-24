@@ -1,6 +1,6 @@
 {
   "name": "tests_passed_after_last_edit_pr",
-  "description": "Tests are run and pass right after the last code edit, then a PR is requested. This is the correct order, so block_pr_without_tests should stay quiet.",
+  "description": "Tests are run and pass right after the last code edit, then a PR is requested. This is the correct order, so block_pr_without_tests should stay quiet. The fixture ends with the assistant's 'gh pr create' tool call, where the Gateway decides (trigger point).",
   "messages": [
     {
       "role": "system",
@@ -55,6 +55,20 @@
     {
       "role": "user",
       "content": "Good, please open a PR."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_pr",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\": \"gh pr create --fill\"}"
+          }
+        }
+      ]
     }
   ],
   "expected": {

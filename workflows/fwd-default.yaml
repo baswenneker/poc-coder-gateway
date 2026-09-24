@@ -1,7 +1,10 @@
 # Workflow Definition: the Rules a team wants its developers to follow.
-# Each Rule is judged per request by the Decider. `broken_when` is phrased so that
-# TRUE means the Rule is broken. `intervention` is one of: flag | propose | block.
-# A Rule only blocks when its intervention is explicitly `block`.
+# The Decider judges the Rules at the end of a Turn (the model's final reply) and when a tool call
+# of the model matches the `trigger` of a Block Rule (see docs/DECISIONS.md #28).
+# `broken_when` is phrased so that TRUE means the Rule is broken.
+# `intervention` is one of: flag | propose | block. A Rule only blocks when its intervention is
+# explicitly `block`, and a Block Rule needs a `trigger`: a regex matched (case-insensitive) against
+# the arguments of a tool call, optionally limited to some tool names (`tools: [bash]`).
 name: fwd-default
 
 phases:
@@ -16,25 +19,25 @@ phases:
 
 rules:
   - id: propose_issue
-    description: Work starts from an issue.
+    description: Work is traceable to an issue.
     broken_when: >-
-      The developer asks to write, change or fix code (or the assistant has started editing files),
-      and nowhere in the conversation is an issue, ticket or work item referenced
-      (e.g. '#123', 'issue 42', 'JIRA-7', a GitHub/GitLab issue URL).
+      Code was changed in this conversation (the assistant edited or wrote files, or ran a command
+      that changes code), and nowhere in the conversation is an issue, ticket or work item referenced
+      (e.g. '#123', 'issue 42', 'JIRA-7', a GitHub/GitLab issue URL). A question about creating an
+      issue that the developer declined is not a reference: the rule stays broken.
     ok_when: >-
-      An issue or ticket is referenced anywhere in the conversation, or the developer is only asking
-      questions / exploring without requesting code changes.
+      An issue or ticket is referenced anywhere in the conversation, or no code was changed
+      (the developer only asked questions or explored the code).
     intervention: propose
     threshold: 0.7
     proposal:
       question: >-
-        Er is nog geen issue genoemd voor dit werk. Zullen we eerst een issue aanmaken,
-        zodat het werk traceerbaar is?
-      header: Eerst een issue?
+        Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?
+      header: Issue aanmaken?
       accept_label: Ja, maak een issue
-      accept_description: Maak eerst een issue aan en ga daarna verder
-      decline_label: Nee, ga door
-      decline_description: Ga door zonder issue
+      accept_description: Maak een issue aan voor dit werk
+      decline_label: Nee, niet nodig
+      decline_description: Geen issue voor dit werk
 
   - id: flag_no_spec
     description: Code changes are based on a discussed spec file.
@@ -48,18 +51,20 @@ rules:
     threshold: 0.7
 
   - id: block_pr_without_tests
-    description: A pull request is only opened after tests are reported green.
+    description: A pull request is only opened (or code pushed) after tests are reported green.
     broken_when: >-
-      The latest developer message asks to open/create a pull request, or the latest assistant
-      message runs 'gh pr create' or an equivalent command, and the conversation does not show that
-      the tests were run and passed after the last code change.
+      The latest assistant message makes a tool call that creates a pull request or merge request,
+      or pushes code (for example 'gh pr create', 'glab mr create' or 'git push'), and the
+      conversation does not show a passing test run after the last code change.
     ok_when: >-
-      The latest developer message asks for something other than a pull request (for example to run
-      the tests), even if a pull request was requested earlier; or a test run that passed is shown
-      after the last code change.
+      The latest assistant message makes no such tool call (a command that is only mentioned or
+      explained in text does not count); or a test run that passed is shown after the last code
+      change. A linter or type check is not a test run.
     intervention: block
     threshold: 0.7
+    trigger:
+      pattern: 'gh pr create|glab mr create|git push'
     block_message: >-
-      De Gateway blokkeert dit verzoek: er wordt een pull request aangemaakt, maar in dit gesprek is
-      niet gemeld dat de tests groen zijn na de laatste wijziging. Draai eerst de tests en laat zien
-      dat ze slagen; vraag daarna opnieuw om de pull request.
+      De Gateway heeft deze stap tegengehouden: het model wilde een pull request aanmaken of code
+      pushen, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging.
+      Draai eerst de tests en laat zien dat ze slagen; vraag daarna opnieuw om de pull request.

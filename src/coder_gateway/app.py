@@ -1,4 +1,9 @@
-"""FastAPI app: the OpenAI-compatible endpoint with Decision + Interventions, and a read API."""
+"""FastAPI app: the OpenAI-compatible endpoint with Decision + Interventions, and a read API.
+
+Requests go upstream without a Decision. The Gateway decides on the reply (DECISIONS.md #28): once at
+the end of a Turn (finish 'stop', no tool calls), and when a tool call of the model matches the trigger
+of a Block Rule, before the client runs it.
+"""
 
 from __future__ import annotations
 
@@ -8,13 +13,13 @@ import logging
 import secrets
 import time
 from collections import defaultdict
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from coder_gateway import transcript
 from coder_gateway.config import GatewayConfig
@@ -22,13 +27,11 @@ from coder_gateway.domain import Decider, Decision, DecisionInput, Intervention,
 from coder_gateway.fingerprint import content_text, conversation_id, store_key, user_messages
 from coder_gateway.interventions import (
     QUESTION_TOOL,
-    GatewayReply,
-    block_reply,
-    completion_json,
-    completion_sse,
-    proposal_text_reply,
-    proposal_tool_reply,
+    block_amendment,
+    proposal_text_amendment,
+    proposal_tool_amendment,
 )
+from coder_gateway.reply import Amendment, AssistantReply
 from coder_gateway.store import Conversation, ConversationStore, ProposalMode, ProposalStatus
 from coder_gateway.upstream import Upstream
 
@@ -117,34 +120,117 @@ def create_app(
             verdicts={}, decider=name, latency_ms=(time.perf_counter() - started) * 1000, error=error
         )
 
-    def choose_intervention(
+    def end_of_turn_intervention(
         vm: VirtualModel,
         conv: Conversation,
-        decision: Decision | None,
+        decision: Decision,
         body: dict[str, Any],
         messages: list[Message],
-    ) -> tuple[str, GatewayReply | None, Rule | None]:
-        if decision is None or decision.error is not None:
-            return "forward", None, None
-        broken = [
-            r for r in vm.workflow.rules if r.id in decision.verdicts and decision.verdicts[r.id].broken
-        ]
-        for rule in broken:
-            if rule.intervention is Intervention.BLOCK:
-                store.add_block(conv, rule.id)
-                return "block", block_reply(rule), rule
-        for rule in broken:
+        reply: AssistantReply,
+    ) -> tuple[str, Amendment | None, Rule | None]:
+        """At the end of a Turn: append the first Proposal that may be shown (DECISIONS.md #11, #12)."""
+        for rule in vm.workflow.rules:
+            verdict = decision.verdicts.get(rule.id)
             if (
-                rule.intervention is Intervention.PROPOSE
-                and rule.proposal
-                and store.can_propose(conv, rule.id)
+                verdict is None
+                or not verdict.broken
+                or rule.intervention is not Intervention.PROPOSE
+                or rule.proposal is None
+                or not store.can_propose(conv, rule.id)
             ):
-                if QUESTION_TOOL in _tool_names(body):
-                    p = store.add_proposal(conv, rule.id, ProposalMode.TOOL, messages)
-                    return "propose_tool", proposal_tool_reply(rule.proposal, p.id), rule
-                store.add_proposal(conv, rule.id, ProposalMode.TEXT, messages)
-                return "propose_text", proposal_text_reply(rule.proposal), rule
-        return "forward", None, None
+                continue
+            if QUESTION_TOOL in _tool_names(body):
+                p = store.add_proposal(conv, rule.id, ProposalMode.TOOL, messages)
+                return "propose_tool", proposal_tool_amendment(rule.proposal, p.id), rule
+            store.add_proposal(conv, rule.id, ProposalMode.TEXT, messages)
+            return "propose_text", proposal_text_amendment(rule.proposal, reply.content), rule
+        return "none", None, None
+
+    def block_intervention(
+        conv: Conversation, decision: Decision, triggered: list[Rule], reply: AssistantReply
+    ) -> tuple[str, Amendment | None, Rule | None]:
+        """On a triggering tool call: Block when one of the triggered Rules is broken."""
+        for rule in triggered:
+            verdict = decision.verdicts.get(rule.id)
+            if verdict is not None and verdict.broken:
+                store.add_block(conv, rule.id)
+                return "block", block_amendment(rule, reply.content), rule
+        return "none", None, None
+
+    def triggered_rules(vm: VirtualModel, reply: AssistantReply) -> list[Rule]:
+        return [
+            rule
+            for rule in vm.workflow.rules
+            if rule.intervention is Intervention.BLOCK
+            and rule.trigger is not None
+            and any(rule.trigger.matches(tc.name, tc.arguments) for tc in reply.tool_calls)
+        ]
+
+    def make_on_finish(
+        vm: VirtualModel, conv: Conversation, turn: int, body: dict[str, Any], messages: list[Message]
+    ) -> Callable[[AssistantReply], Awaitable[Amendment | None]]:
+        """The callback that sees the model's complete reply and may amend it."""
+        key = store_key(vm.name, conv.id)
+
+        async def on_finish(reply: AssistantReply) -> Amendment | None:
+            if reply.finish_reason == "stop" and not reply.tool_calls:
+                reason, triggered = "end_of_turn", []
+            elif reply.tool_calls and reply.finish_reason in ("tool_calls", "stop"):
+                triggered = triggered_rules(vm, reply)
+                if not triggered:
+                    return None  # an ordinary tool call: no Decision
+                reason = "trigger:" + ",".join(r.id for r in triggered)
+            else:
+                return None  # length, content_filter, ...: pass through
+            async with locks[key]:
+                if conv.turn != turn:
+                    log.info(
+                        "conv=%s turn=%d reason=%s skipped (stale, now turn %d)",
+                        conv.id,
+                        turn,
+                        reason,
+                        conv.turn,
+                    )
+                    return None
+                if reason == "end_of_turn" and conv.proposal_shown_this_turn():
+                    # The Proposal of this Turn was answered via the question tool and the model
+                    # finished again: nothing more to propose this Turn (DECISIONS.md #29).
+                    log.info(
+                        "conv=%s turn=%d reason=%s skipped (proposal shown this turn)", conv.id, turn, reason
+                    )
+                    return None
+                decision = await decide(vm, conv, [*messages, reply.as_message()])
+                if decision is None:
+                    return None
+                summary = store.set_decision(conv, decision, reason)
+                store.record_event(
+                    conv, "decision_error" if decision.error else "decision", reason=reason, decision=summary
+                )
+                store.update_flags(conv, decision, vm.workflow)
+                action, amendment, rule = "none", None, None
+                if decision.error is None:
+                    if triggered:
+                        action, amendment, rule = block_intervention(conv, decision, triggered, reply)
+                    else:
+                        action, amendment, rule = end_of_turn_intervention(
+                            vm, conv, decision, body, messages, reply
+                        )
+                log.info(
+                    "conv=%s turn=%d req=%d decision#%d reason=%s %.0fms/%s broken=%s action=%s%s",
+                    conv.id,
+                    conv.turn,
+                    conv.requests,
+                    conv.decisions,
+                    reason,
+                    decision.latency_ms,
+                    decision.decider,
+                    f"error({decision.error})" if decision.error else decision.broken(),
+                    action,
+                    f"({rule.id})" if rule else "",
+                )
+                return amendment
+
+        return on_finish
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
@@ -194,36 +280,13 @@ def create_app(
             users = user_messages(messages)
             store.begin_request(conv, len(users), content_text(users[-1].get("content")) if users else "")
             store.apply_answers(conv, messages, vm.workflow)
-
-            decision = await decide(vm, conv, messages)
-            if decision is not None:
-                summary = store.set_decision(conv, decision)
-                store.record_event(conv, "decision_error" if decision.error else "decision", decision=summary)
-                store.update_flags(conv, decision, vm.workflow)
-
-            action, reply, rule = choose_intervention(vm, conv, decision, body, messages)
-            log.info(
-                "conv=%s turn=%d req=%d decision=%s broken=%s action=%s%s",
-                conv.id,
-                conv.turn,
-                conv.requests,
-                f"{decision.latency_ms:.0f}ms/{decision.decider}" if decision else "-",
-                (f"error({decision.error})" if decision.error else decision.broken()) if decision else "-",
-                action,
-                f"({rule.id})" if rule else "",
-            )
-            if reply is None:
-                store.record_event(conv, "forwarded", stream=stream)
-        if reply is None:
+            turn = conv.turn
+            store.record_event(conv, "forwarded", stream=stream)
+            log.info("conv=%s turn=%d req=%d forward stream=%s", conv.id, conv.turn, conv.requests, stream)
+        if decider is None:
             return await upstream.forward(body, vm)
-        if stream:
-            include_usage = bool((body.get("stream_options") or {}).get("include_usage"))
-            return StreamingResponse(
-                iter(completion_sse(reply, vm.name, include_usage)),
-                media_type="text/event-stream",
-                headers={"cache-control": "no-cache"},
-            )
-        return JSONResponse(completion_json(reply, vm.name))
+        # No Decision here: the reply is judged once it is complete (DECISIONS.md #28).
+        return await upstream.forward(body, vm, on_finish=make_on_finish(vm, conv, turn, body, messages))
 
     # --- Read API (scoped to the caller's Virtual Model) -------------------------------------------
 
@@ -278,6 +341,8 @@ def create_app(
             "virtual_model": vm.name,
             "conversation": conv.id,
             "turn": conv.turn,
+            "requests": conv.requests,
+            "decisions": conv.decisions,
             "phase": conv.phase,
             "flags": data["flags"],
             "open_proposals": [p for p in data["proposals"] if p["status"] == ProposalStatus.OPEN],
@@ -345,7 +410,8 @@ def render_dashboard(conversations: list[Conversation]) -> str:
         )
         d = c.last_decision
         decision = (
-            f"{_e(d['decider'])} {d['latency_ms']} ms, broken: {_e(', '.join(d['broken']) or 'none')}"
+            f"{_e(d.get('reason') or '-')}: {_e(d['decider'])} {d['latency_ms']} ms, "
+            f"broken: {_e(', '.join(d['broken']) or 'none')}"
             + (f' <span class="block">error: {_e(d["error"])}</span>' if d.get("error") else "")
             if d
             else '<span class="muted">no decision yet</span>'
@@ -357,8 +423,9 @@ def render_dashboard(conversations: list[Conversation]) -> str:
         )
         cards.append(
             f'<div class="card"><h2>{_e(c.id)}</h2>'
-            f'<div class="muted">{_e(c.virtual_model)} &middot; turn {c.turn} &middot; {c.requests} requests '
-            f"&middot; phase {_e(c.phase or '-')} &middot; updated {_e(c.updated_at[11:19])} UTC</div>"
+            f'<div class="muted">{_e(c.virtual_model)} &middot; turn {c.turn} &middot; '
+            f"{c.requests} requests, {c.decisions} decisions &middot; phase {_e(c.phase or '-')} "
+            f"&middot; updated {_e(c.updated_at[11:19])} UTC</div>"
             f"<p>{flags}{props}{blocks}</p><p>Last Decision: {decision}</p>"
             f"<table>{events}</table></div>"
         )

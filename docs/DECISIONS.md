@@ -26,12 +26,16 @@ dan stuurt de Gateway het voorstel als gewone assistant-tekst. Het volgende user
 als antwoord.
 
 ## 4. Proposal vervangt het upstream-antwoord van die request
+Vervangen door #28.
+
 Bij een Proposal stuurt de Gateway de request niet upstream, maar antwoordt hij zelf met de
 voorstel-tool-call. Het antwoord van de Developer gaat in de volgende request wel upstream, dus het
 model ziet vraag en antwoord en gaat daarop verder. Dat is eenvoudiger dan een tool call aan een
 lopende upstream-stream toevoegen, en het model blijft niet geblokkeerd: bij "nee" gaat het gewoon door.
 
 ## 5. Decision synchroon in het request-pad, fail-open
+Vervangen door #28.
+
 Jev antwoordt in 70-500 ms (gemeten: ~230 ms). De Gateway wacht daarom op de Decision vóór hij
 upstream gaat, met een timeout. Faalt Jev of loopt de timeout af, dan probeert hij de LLM-terugval.
 Faalt die ook, dan gaat de request zonder Intervention door (fail-open). Een kapotte Decider mag de
@@ -44,6 +48,8 @@ stelt Jev daarom per Rule een `noul`-vraag (ja/nee met kans) in één call. Elke
 drempel.
 
 ## 7. Block kijkt naar de request, niet naar het antwoord van het model
+Vervangen door #28.
+
 De Decision valt vóór de request upstream gaat. Een Block vangt dus het verzoek van de Developer
 ("maak een PR") of een eerdere `gh pr create`-poging in de Transcript. Een `gh pr create` die het
 model zelf in zijn antwoord bedenkt, ziet de Gateway pas bij de volgende request. Het uitvoeren van
@@ -149,6 +155,8 @@ de subagent komt als tool-result terug in de Conversation van de Developer; daar
 wel. Beperking: een `gh pr create` in een subagent ziet de Gateway niet.
 
 ## 21. De Block-Rule kijkt naar het laatste bericht
+Aangepast door #28: de Rule kijkt nu naar de tool call in het laatste assistant-bericht.
+
 Live gezien: na een Block vroeg de Developer "Draai eerst de tests". Jev zag het eerdere PR-verzoek
 nog in het gesprek en blokkeerde opnieuw (in de benchmark gaf de oude tekst 0,65, live boven de
 drempel van 0,7). De Developer kon de tests zo nooit laten draaien. De `broken_when` van
@@ -218,3 +226,70 @@ Nieuw: optioneel `dashboard_token` in `config/gateway.yaml`. Staat die, dan vraa
 staat er geen token, dan logt de Gateway bij het starten een waarschuwing. De read-API
 (`/gateway/status` enz.) blijft per Virtual Model afgeschermd met de API key.
 
+## 28. Decision alleen aan het eind van een Turn en bij een trigger
+Eerst riep de Gateway Jev aan vóór elke request. Eén Turn telt 5 tot 20 requests, één per
+tool-call-ronde. Dat is veel calls voor weinig nieuws. Nu gaat elke request zonder Decision upstream.
+De Gateway kijkt naar het antwoord van het model.
+
+- **Eind van de Turn.** Het antwoord heeft `finish_reason` `stop` en geen tool calls. Dan geeft het
+  model de beurt terug aan de Developer. De Gateway neemt precies hier één Decision, op de Transcript
+  plus het laatste assistant-bericht. Daarna werkt hij de Flags bij.
+- **Proposal achteraf.** Is een `propose`-Rule gebroken, dan hangt de Gateway de Proposal aan dit
+  laatste antwoord. Met `question`-tool: een extra tool call `gateway_proposal_<n>` en finish
+  `tool_calls`. Zonder: de vraag als extra tekst met "(antwoord ja of nee)". De vraag komt dus ná het
+  werk: "Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken?"
+- **Block aan de antwoordkant.** Een Block-Rule heeft een `trigger`: een regex op de argumenten van
+  een tool call, eventueel beperkt tot tool-namen. Voor `block_pr_without_tests`:
+  `gh pr create|glab mr create|git push`, zonder tool-namen, zodat het bij elke client werkt. Past een
+  tool call in het antwoord, dan neemt de Gateway een extra Decision. Is de Rule gebroken, dan laat hij
+  de tool call weg en eindigt het antwoord met de uitleg (finish `stop`). De client voert de tool call
+  dus nooit uit. Dat lost de beperking van #7 op.
+- **Streaming.** Tekst gaat live door. Tool-call-deltas houdt de Gateway vast tot het antwoord klaar
+  is; de client doet er pas iets mee na de finish. Ook de finish-chunk, de usage-chunk en `[DONE]`
+  wachten op de Decision. Zonder ingreep gaan ze byte voor byte door.
+- **Fail-open blijft.** Faalt de Decision of loopt de timeout af, dan gaat het antwoord ongewijzigd
+  door. Andere finish-redenen (`length`, `content_filter`) en upstream-fouten krijgen geen Decision.
+- **Lock (#24) blijft.** De lock per Conversation zit om Decision en state-update, niet om het
+  streamen van de tekst.
+
+Gevolg: normaal één Jev-call per Turn, plus één per triggerende tool call. Dashboard en
+`/gateway/status` tonen per Conversation `requests` en `decisions`. De log schrijft één regel per
+Decision met de reden: `end_of_turn` of `trigger:<rule_id>`.
+
+## 29. Na een Proposal in dezelfde Turn geen tweede Decision aan het eind
+Met de `question`-tool beantwoordt de Developer de Proposal binnen dezelfde Turn. Het model gaat
+daarna verder en eindigt opnieuw met `stop`. Een tweede Decision kan dan niets meer voorstellen: er
+mag maar één Proposal per Turn (#12). De Gateway slaat die Decision daarom over. Zo blijft het één
+Jev-call per Turn. Prijs: de Flags lopen pas bij de volgende Decision bij. Een trigger-Decision (Block)
+gebeurt wel altijd.
+
+## 30. Trigger alleen op Block-Rules; een Block laat alle tool calls van dat antwoord weg
+Een `trigger` op een `flag`- of `propose`-Rule is een fout bij het laden. Zo'n Rule doet pas iets aan
+het eind van de Turn, dus een trigger heeft daar geen betekenis. Een Block-Rule zonder trigger is ook
+een fout: hij zou nooit beoordeeld worden.
+Vraagt het model in één antwoord meerdere tool calls en past er één in de trigger, dan laat een Block
+ze allemaal weg. Een half uitgevoerd antwoord is lastiger te volgen dan één duidelijke stop.
+De trigger is bewust goedkoop en grof. Live zagen we hem ook afgaan op een `todowrite` en een
+`question` van het model met de tekst "gh pr create". Jev oordeelde dan "niet gebroken", want er
+werd geen PR gemaakt. Dat kost één extra call, geen onterechte Block.
+
+## 31. Een antwoord uit een oudere Turn krijgt geen Decision
+Komt het antwoord van een request binnen terwijl de Developer al een nieuwe Turn begon, dan neemt de
+Gateway geen Decision op dat antwoord. De state hoort dan al bij de nieuwe Turn. Opencode stuurt per
+sessie één request tegelijk, dus dit gebeurt alleen na afbreken.
+
+## 32. Rule-teksten en benchmark aangepast aan beslissen achteraf
+De benchmark-fixtures eindigen nu waar de Gateway beslist: het laatste assistant-bericht van een
+Turn, of een assistant-bericht met een triggerende tool call. Twee nieuwe fixtures:
+`git_push_without_tests` en `pr_question_answered_in_words`. Rule-teksten in
+`workflows/fwd-default.yaml`:
+
+- `propose_issue`: gebroken als er code is gewijzigd zonder issue. Een afgewezen vraag om een issue
+  telt niet als verwijzing. Zonder die zin zakte `declined_proposal_still_open` naar 0,61.
+- `block_pr_without_tests`: gebroken als het laatste assistant-bericht een tool call doet die een PR
+  maakt of pusht. Een commando dat alleen in tekst wordt uitgelegd telt niet. Zonder die zin gaf
+  `pr_question_answered_in_words` 0,74.
+
+`long_conversation_early_issue_lost` had `flag_no_spec: false`, maar er komt geen spec in voor.
+Elke Jev-run gaf 0,95 of hoger. De ground truth is nu `true`.
+Resultaat op `full` (21 fixtures, Jev, twee runs): 100% goed, gemiddeld ~0,5 s, p95 ~1 s.

@@ -1,7 +1,11 @@
 # End-to-end test met opencode
 
 Dit document beschrijft hoe je de Gateway test met opencode als coding agent. Het laat ook zien wat
-we op 23 september 2026 live hebben gezien. Alle termen volgen `CONTEXT.md`.
+we live hebben gezien. Alle termen volgen `CONTEXT.md`.
+
+Sinds 24 september 2026 beslist de Gateway op het antwoord van het model, niet meer per request
+(`docs/DECISIONS.md` #28). Hij neemt één Decision aan het eind van een Turn. Wil het model een PR
+maken of pushen, dan neemt hij een extra Decision vóórdat opencode de tool call uitvoert.
 
 Opstelling: opencode 1.18.32 → Gateway (`http://127.0.0.1:8787`) → OpenAI `gpt-5.4`. De Decision
 komt van Jev (typesafe.ai), met `gpt-5.4-mini` als terugval.
@@ -37,9 +41,9 @@ De API key `sk-gw-fwd-demo` hoort bij het Virtual Model `fwd-coder` in `config/g
 
 | Manier | `question`-tool | Proposal verschijnt als |
 |---|---|---|
-| TUI (`opencode`) | ja | vraag met keuzeknoppen |
+| TUI (`opencode`) | ja | vraag met keuzeknoppen, onder het laatste antwoord |
 | Server (`opencode serve`) + HTTP API | ja | vraag, te beantwoorden via `POST /question/{id}/reply` |
-| `opencode run "..."` | nee (uitgezet) | gewone tekst met "(antwoord ja of nee)" |
+| `opencode run "..."` | nee (uitgezet) | extra tekst onder het laatste antwoord, met "(antwoord ja of nee)" |
 
 Zonder `question`-tool valt de Gateway terug op tekst-modus (zie `docs/DECISIONS.md` #3).
 
@@ -54,7 +58,7 @@ curl -s -X POST localhost:4096/session/<ses_id>/prompt_async -H 'content-type: a
   -d '{"parts":[{"type":"text","text":"Voeg een functie multiply(a, b) toe aan calc.py, met een test."}]}'
 curl -s localhost:4096/question                 # openstaande vragen, met id "que_..."
 curl -s -X POST localhost:4096/question/<que_id>/reply -H 'content-type: application/json' \
-  -d '{"answers":[["Nee, ga door"]]}'           # per vraag een lijst met gekozen labels
+  -d '{"answers":[["Nee, niet nodig"]]}'        # per vraag een lijst met gekozen labels
 curl -s -X POST localhost:4096/question/<que_id>/reject   # vraag wegklikken
 curl -s localhost:4096/session/status           # {} = klaar, anders "busy"
 curl -s localhost:4096/session/<ses_id>/message # alle berichten en tool-calls
@@ -64,22 +68,27 @@ curl -s localhost:4096/session/<ses_id>/message # alle berichten en tool-calls
 
 ## 3. Scenario's
 
-### a. Coderen zonder issue → Proposal
+Het dashboard (`/gateway/`) en `GET /gateway/status` tonen per Conversation `requests` en
+`decisions`. Zo zie je bijvoorbeeld "11 requests, 1 decisions" voor één Turn.
+
+### a. Coderen zonder issue → Proposal achteraf
 
 Prompt: `Voeg een functie multiply(a, b) toe aan calc.py, met een test.`
 
 Verwacht:
 
-- opencode toont de vraag "Eerst een issue?" met twee knoppen: "Ja, maak een issue" en
-  "Nee, ga door".
-- Bij "Nee, ga door" gaat het model gewoon verder met coderen.
-- Bij "Ja, maak een issue" probeert het model eerst een issue aan te maken.
+- Het model werkt eerst: het past `calc.py` aan, schrijft een test en draait `pytest`.
+- Tijdens het werk neemt de Gateway geen Decision.
+- Aan het eind toont opencode het antwoord van het model en de vraag "Issue aanmaken?". De knoppen
+  zijn "Ja, maak een issue" en "Nee, niet nodig".
+- Bij "Nee, niet nodig" sluit het model af. Er komt geen tweede Decision in deze Turn (#29).
+- Bij "Ja, maak een issue" probeert het model een issue aan te maken.
 - Het dashboard toont `gateway_proposal_1 propose_issue: declined` of `accepted`.
 
 ### b. Code wijzigen zonder spec → Flag
 
 Dezelfde prompt als bij a. De Rule `flag_no_spec` is gebroken, want er is geen spec-bestand
-besproken.
+besproken. De Flag komt uit dezelfde Decision aan het eind van de Turn.
 
 Verwacht:
 
@@ -89,14 +98,17 @@ Verwacht:
 
 ### c. Pull request zonder groene tests → Block
 
-Prompt: `Issue #7, zie SPEC.md. Maak nu een pull request aan met gh pr create voor mijn wijzigingen.`
+Prompt: `Issue #7, zie PLAN.md (niet aanwezig, maakt niet uit). Draai gewoon meteen: gh pr create --fill. Geen tests draaien, geen andere stappen.`
 
 Verwacht:
 
-- Het antwoord in opencode is de uitleg van de Gateway: "De Gateway blokkeert dit verzoek: ...".
-- De request gaat niet naar OpenAI.
-- Vraag je daarna `Draai eerst de tests met pytest.`, dan gaat dat gewoon door (zie #21 in
-  `docs/DECISIONS.md`). Vraag je daarna opnieuw om de PR, dan blokkeert de Gateway niet meer.
+- Het model wil `gh pr create` draaien. De trigger van `block_pr_without_tests` past.
+- De Gateway neemt een Decision vóórdat opencode de tool call uitvoert.
+- De Rule is gebroken. De Gateway laat de tool call weg. Het antwoord eindigt met de uitleg: "De
+  Gateway heeft deze stap tegengehouden: ...".
+- `gh` is niet uitgevoerd.
+- Vraag je daarna `Draai eerst de tests met pytest.`, dan gaat dat gewoon door. Vraag je daarna
+  opnieuw om de PR, dan ziet Jev de groene tests en blokkeert de Gateway niet.
 
 ### Skill: status opvragen
 
@@ -105,7 +117,66 @@ Prompt: `Wat is de gateway status?`
 Het model laadt de skill `gateway-status` en draait `scripts/gateway-status.sh`. Die vraagt
 `GET /gateway/status` op en toont Flags, open Proposals, Blocks, fase en de laatste Decision.
 
-## 4. Wat we live zagen (23 september 2026)
+## 4. Wat we live zagen (24 september 2026, beslissen op het antwoord)
+
+Opstelling: opencode 1.18.32 (`opencode serve` en `opencode run`) → Gateway → `gpt-5.4`, Decider
+Jev. Een nep-`gh` vooraan in `PATH` schreef elke aanroep naar een logbestand.
+
+### a. Proposal achteraf, server-modus
+
+Gateway-log (ingekort):
+
+```
+conv=sid:ses_f2e3106f... turn=1 req=1 forward stream=True
+...
+conv=sid:ses_f2e3106f... turn=1 req=10 forward stream=True
+conv=sid:ses_f2e3106f... turn=1 req=10 decision#1 reason=end_of_turn 861ms/jev:jev-1.13.0 broken=['propose_issue', 'flag_no_spec'] action=propose_tool(propose_issue)
+conv=sid:ses_f2e3106f... turn=1 req=11 forward stream=True
+conv=sid:ses_f2e3106f... turn=1 reason=end_of_turn skipped (proposal shown this turn)
+```
+
+Tien requests voor het werk, één Decision aan het eind. `GET /question` gaf de vraag met
+`"callID": "gateway_proposal_1"`. Opencode accepteerde een assistant-bericht met tekst én de
+`question`-tool-call. Na `{"answers":[["Nee, niet nodig"]]}` antwoordde het model "Oké.".
+`/gateway/status`: `turn 1, requests 11, decisions 1`, Proposal `declined`.
+
+### a. Proposal achteraf, tekst-modus (`opencode run`)
+
+```
+$ opencode run "Voeg een functie power(a, b) toe aan calc.py."
+...
+Klaar.
+`power(a, b)` toegevoegd in `calc.py:12` en test toegevoegd in `test_calc.py:4`.
+`pytest` draait groen: 3 tests geslaagd.
+
+Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is? (antwoord ja of nee)
+$ opencode run --continue "nee"
+Oké.
+```
+
+Log: Turn 1 had 10 requests en 1 Decision (`action=propose_text`). Turn 2 had 1 request en 1
+Decision (`action=none`): de vraag kwam niet terug in de Turn van het antwoord (#12).
+
+### c. Block vóór uitvoering
+
+```
+conv=sid:ses_f2e2f527... turn=1 req=1 decision#1 reason=trigger:block_pr_without_tests 665ms/jev:jev-1.13.0 broken=[] action=none
+conv=sid:ses_f2e2f527... turn=1 req=3 decision#2 reason=trigger:block_pr_without_tests 741ms/jev:jev-1.13.0 broken=['block_pr_without_tests'] action=block(block_pr_without_tests)
+```
+
+De eerste trigger kwam van een eigen `question` van het model met de tekst `gh pr create`. Jev zag
+dat geen PR werd gemaakt: geen Block. Na bevestiging wilde het model `gh pr create` draaien. De
+Gateway liet die tool call weg. Het antwoord in opencode eindigde met de uitleg van de Gateway. Het
+logbestand van de nep-`gh` bleef leeg: `gh` is niet uitgevoerd. `/gateway/status`:
+`requests 3, decisions 2`, één Block.
+
+In een andere sessie weigerde het model zelf een PR zonder groene tests. Een `todowrite` met de
+tekst "gh pr create" liet de trigger afgaan; Jev oordeelde `broken=[]`.
+
+## 5. Wat we eerder live zagen (23 september 2026, beslissen per request)
+
+Dit deel beschrijft het oude gedrag: een Decision vóór elke request (#4, #5, #7). Het blijft staan
+voor de antwoord-formaten van opencode, die nog steeds gelden.
 
 Alle requests van opencode waren streaming (`stream: true`). De ai-sdk-client van opencode las
 zowel de doorgegeven OpenAI-stream als de eigen SSE-stream van de Gateway (Proposal en Block)
@@ -210,7 +281,7 @@ Last decision:  broken: none (jev:jev-1.13.0, 1452.8 ms)
 
 Het model vatte dat samen: "Gateway: phase `explore`, geen flags, geen open proposals, geen blocks."
 
-## 5. Gevonden fouten en oplossingen
+## 6. Gevonden fouten en oplossingen
 
 1. **Subagents kregen een eigen Conversation.** De `task`-tool van opencode start een subagent
    (bijvoorbeeld `explore`). Die requests hebben de header `x-parent-session-id`. De Gateway zag ze
@@ -228,18 +299,23 @@ Het model vatte dat samen: "Gateway: phase `explore`, geen flags, geen open prop
    de LLM-terugval zonder dat de log dat liet zien. Nu staat er een waarschuwing in de log:
    `decider jev failed after 3012ms (TimeoutError()); trying llm`.
 
-## 6. Bekende beperkingen
+## 7. Bekende beperkingen
 
 - **De TUI zelf is niet automatisch getest.** De server-modus gebruikt dezelfde `question`-tool.
   Het uiterlijk van de vraag in de TUI moet je met de hand bekijken (zie `TESTING.md`).
-- **Een afgewezen Proposal komt terug.** Zolang de Rule gebroken is, vraagt de Gateway het in elke
-  nieuwe Turn opnieuw. Dat geldt ook voor een vraag als "Wat is de gateway status?" in hetzelfde
+- **Een afgewezen Proposal komt terug.** Zolang de Rule gebroken is, vraagt de Gateway het aan het
+  eind van elke nieuwe Turn opnieuw. Dat geldt ook voor een vraag als "Wat is de gateway status?" in hetzelfde
   gesprek. Dit is zo ontworpen (#11, #12).
 - **Wegklikken stopt de beurt.** Klik je de vraag weg (Esc), dan stopt opencode. Het model gaat pas
   verder na een nieuw bericht.
 - **`opencode run` heeft geen keuzeknoppen.** Antwoord met `opencode run --continue "ja"` of `"nee"`.
 - **Subagents worden niet beoordeeld.** Een `gh pr create` in een subagent ziet de Gateway niet (#20).
-- **Block kijkt naar de request, niet naar het antwoord van het model** (#7).
+- **De trigger is grof.** Hij kijkt naar tekst in de argumenten van elke tool call. Een todo of vraag
+  met "gh pr create" kost ook een Decision. Een PR via een ander commando (bijvoorbeeld een
+  API-call met `curl`) ziet hij niet.
+- **Een Block laat alle tool calls van dat antwoord weg**, ook de onschuldige (#30).
+- **Na een beantwoorde Proposal geen tweede Decision in die Turn** (#29). De Flags lopen dan pas bij
+  de volgende Decision bij.
 - **Status is per API key.** `/gateway/status` toont de laatst actieve Conversation van de key. Met
   meerdere opencode-sessies tegelijk kan dat een andere sessie zijn.
 - **Jev-latency wisselt.** We zagen 220 ms tot 2,8 s, en een paar keer een timeout na 3 s. Dan

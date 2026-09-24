@@ -6,6 +6,7 @@ Keep it free of I/O.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
@@ -36,6 +37,22 @@ class ProposalSpec:
 
 
 @dataclass(frozen=True)
+class Trigger:
+    """A cheap pattern on a tool call the model wants to make. Only a match makes the Gateway run a
+    Decision for a Block Rule before the client executes the tool call (DECISIONS.md #28)."""
+
+    # Regular expression, matched case-insensitively against the tool call's arguments (JSON string).
+    pattern: str
+    # Optional tool names; when given, the tool call's name must be one of them.
+    tools: tuple[str, ...] = ()
+
+    def matches(self, tool_name: str, arguments: str) -> bool:
+        if self.tools and tool_name not in self.tools:
+            return False
+        return re.search(self.pattern, arguments, re.IGNORECASE) is not None
+
+
+@dataclass(frozen=True)
 class Rule:
     """One expectation in a Workflow Definition plus the Intervention it triggers when broken."""
 
@@ -48,8 +65,10 @@ class Rule:
     intervention: Intervention
     threshold: float = 0.7
     proposal: ProposalSpec | None = None
-    # Explanation returned as the assistant reply when the Rule blocks a request.
+    # Explanation that replaces the blocked tool call in the assistant reply.
     block_message: str | None = None
+    # Required for intervention `block`: which tool calls make the Gateway judge this Rule.
+    trigger: Trigger | None = None
 
 
 @dataclass(frozen=True)
@@ -93,7 +112,8 @@ class RuleVerdict:
 
 @dataclass(frozen=True)
 class Decision:
-    """The verdict for one request: which Rules are broken."""
+    """The verdict at one decision point (end of a Turn, or a triggering tool call): which Rules are
+    broken."""
 
     verdicts: dict[str, RuleVerdict]
     decider: str

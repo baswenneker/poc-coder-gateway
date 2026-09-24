@@ -1,4 +1,4 @@
-"""JevDecider: one System One call (typesafe_sdk) per request, one Noul question per Rule.
+"""JevDecider: one System One call (typesafe_sdk) per Decision, one Noul question per Rule.
 
 See PLAN.md ("Beslissing ... door Jev") and docs/DECISIONS.md #6 (one yes/no question per Rule
 instead of one enum, because multiple Rules can be broken at once).

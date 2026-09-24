@@ -5,12 +5,17 @@ description: Shows what the Coder Gateway currently thinks of this conversation 
 
 # Gateway status
 
-The Coder Gateway sits between this coding agent and the model. It checks every request against
-the team workflow and can:
+The Coder Gateway sits between this coding agent and the model. It checks the conversation against
+the team workflow at the end of each turn, and when the model wants to run a command such as
+`gh pr create` or `git push`. It can:
 
 - set a **flag**: a rule is broken; no effect on the conversation;
-- make a **proposal**: a question to the developer (e.g. "create an issue first?");
-- **block** a request: refuse it and explain why (e.g. a pull request without green tests).
+- make a **proposal**: a question to the developer at the end of the reply (e.g. "create an issue for
+  this work?");
+- **block** a tool call: leave it out before it runs and explain why (e.g. a pull request without
+  green tests).
+
+The status also shows how many requests and how many decisions the Gateway made.
 
 The Gateway has a read API. This skill queries it and shows the result to the developer.
 

@@ -1,6 +1,6 @@
 {
-  "name": "pr_without_tests",
-  "description": "Issue and spec are both fine, but the developer asks for a PR without any test run being shown in the conversation at all. block_pr_without_tests should fire. The fixture ends with the assistant's 'gh pr create' tool call, where the Gateway decides (trigger point).",
+  "name": "git_push_without_tests",
+  "description": "Issue and plan referenced, code changed, the developer says 'push it' and the assistant runs 'git push' without any test run. The trigger also covers pushes: block_pr_without_tests should fire.",
   "messages": [
     {
       "role": "system",
@@ -8,7 +8,7 @@
     },
     {
       "role": "user",
-      "content": "Issue #77: typo in the README install section. I checked PLAN.md, this is a trivial docs fix."
+      "content": "Issue #91, see PLAN.md 'timeouts': raise the HTTP timeout to 30s."
     },
     {
       "role": "assistant",
@@ -19,7 +19,7 @@
           "type": "function",
           "function": {
             "name": "edit",
-            "arguments": "{\"filePath\": \"README.md\", \"oldString\": \"pip instal\", \"newString\": \"pip install\"}"
+            "arguments": "{\"filePath\": \"src/http.py\", \"oldString\": \"timeout=10\", \"newString\": \"timeout=30\"}"
           }
         }
       ]
@@ -31,18 +31,18 @@
     },
     {
       "role": "user",
-      "content": "Looks good, open a PR for this."
+      "content": "Good, commit and push it."
     },
     {
       "role": "assistant",
-      "content": null,
+      "content": "Committing and pushing.",
       "tool_calls": [
         {
-          "id": "call_pr",
+          "id": "call_2",
           "type": "function",
           "function": {
             "name": "bash",
-            "arguments": "{\"command\": \"gh pr create --title 'Fix README typo' --body 'Closes #77'\"}"
+            "arguments": "{\"command\": \"git commit -am 'Raise HTTP timeout to 30s (#91)' && git push origin main\"}"
           }
         }
       ]

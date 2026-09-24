@@ -32,8 +32,27 @@ load_dotenv(REPO_ROOT / ".env.local")
 
 WORKFLOW = load_workflow(REPO_ROOT / "workflows" / "fwd-default.yaml")
 
+# Transcripts end where the Gateway decides (DECISIONS.md #28): the final assistant message of a Turn,
+# or an assistant message with a triggering tool call.
 TRANSCRIPT_NO_ISSUE_NO_SPEC: list[Message] = [
     {"role": "user", "content": "please add a retry to src/net.py"},
+    {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "edit",
+                    "arguments": '{"filePath": "src/net.py", "oldString": "return get(url)", '
+                    '"newString": "return retry(get, url, attempts=3)"}',
+                },
+            }
+        ],
+    },
+    {"role": "tool", "tool_call_id": "call_1", "content": "Edit applied successfully."},
+    {"role": "assistant", "content": "Done: fetch now retries up to 3 times."},
 ]
 
 TRANSCRIPT_WITH_ISSUE_AND_SPEC: list[Message] = [
@@ -67,6 +86,17 @@ TRANSCRIPT_PR_WITHOUT_TESTS: list[Message] = [
         "content": "Done, I added the --verbose flag.",
     },
     {"role": "user", "content": "great, now create a PR"},
+    {
+        "role": "assistant",
+        "content": "Creating the pull request.",
+        "tool_calls": [
+            {
+                "id": "call_2",
+                "type": "function",
+                "function": {"name": "bash", "arguments": '{"command": "gh pr create --fill"}'},
+            }
+        ],
+    },
 ]
 
 
