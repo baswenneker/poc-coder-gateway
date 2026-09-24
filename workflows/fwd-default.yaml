@@ -4,7 +4,8 @@
 # `broken_when` is phrased so that TRUE means the Rule is broken.
 # `intervention` is one of: flag | propose | block. A Rule only blocks when its intervention is
 # explicitly `block`, and a Block Rule needs a `trigger`: a regex matched (case-insensitive) against
-# the arguments of a tool call, optionally limited to some tool names (`tools: [bash]`).
+# the string values in the arguments of a tool call (whitespace runs made one space, first 8,000
+# characters), optionally limited to some tool names (`tools: [bash]`). Keep trigger regexes simple.
 name: fwd-default
 
 phases:
@@ -63,7 +64,9 @@ rules:
     intervention: block
     threshold: 0.7
     trigger:
-      pattern: 'gh pr create|glab mr create|git push'
+      # Global git options (`git -C /path push`, `git -c k=v push`) may sit between git and push. An
+      # option value never starts with '-', so the regex stays linear (DECISIONS.md #34, #35).
+      pattern: '\bgh\s+pr\s+create\b|\bglab\s+mr\s+create\b|\bgit\b(\s+-\S+(\s+[^\s-]\S*)?)*\s+push\b'
     block_message: >-
       De Gateway heeft deze stap tegengehouden: het model wilde een pull request aanmaken of code
       pushen, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging.

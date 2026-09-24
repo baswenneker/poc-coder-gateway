@@ -62,3 +62,57 @@ def test_default_workflow_block_rule_has_client_agnostic_trigger() -> None:
     assert rule.trigger is not None and rule.trigger.tools == ()
     for command in ("gh pr create --fill", "glab mr create", "git push -u origin feat"):
         assert rule.trigger.matches("bash", json.dumps({"command": command}))
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"command":"git push"}',
+        '{"command":"git\\u0020push"}',
+        '{"command": "git\\tpush origin main"}',
+        json.dumps({"command": "git  push"}),
+        json.dumps({"args": ["bash", "-c", "git push"]}),
+        "git push",  # not JSON: matched as it is
+    ],
+)
+def test_trigger_matches_decoded_arguments(arguments: str) -> None:
+    assert Trigger(pattern="git push").matches("bash", arguments)
+
+
+def test_trigger_only_looks_at_the_start_of_long_arguments() -> None:
+    padding = "x" * 10_000
+    assert not Trigger(pattern="git push").matches("bash", json.dumps({"command": padding + " git push"}))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git push",
+        "git -C /x push",
+        "git -c a=b push origin main",
+        "git --no-pager push",
+        "cd repo && git\tpush -u origin feat",
+        "gh pr create --fill",
+        "gh  pr\tcreate",
+        "glab mr create",
+    ],
+)
+def test_default_trigger_matches(command: str) -> None:
+    rule = load_workflow(REPO_ROOT / "workflows" / "fwd-default.yaml").rule("block_pr_without_tests")
+    assert rule.trigger is not None and rule.trigger.matches("bash", json.dumps({"command": command}))
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status",
+        "pushd /tmp",
+        "git -C /x status",
+        "git pushx",
+        "legit push",
+        " ".join(["git"] + ["-a"] * 40 + ["status"]),
+    ],
+)
+def test_default_trigger_does_not_match(command: str) -> None:
+    rule = load_workflow(REPO_ROOT / "workflows" / "fwd-default.yaml").rule("block_pr_without_tests")
+    assert rule.trigger is not None and not rule.trigger.matches("bash", json.dumps({"command": command}))

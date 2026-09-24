@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 
+import pytest
 from gateway_helpers import make_workflow, parse_with_openai_sdk, upstream_json, upstream_sse
 
 from coder_gateway.domain import ProposalSpec
@@ -151,3 +152,77 @@ def test_json_reply_and_amendments() -> None:
 def test_text_amendment_without_model_text_has_no_leading_blank_line() -> None:
     assert proposal_text_amendment(SPEC, "").append_text == f"Een issue? {TEXT_MODE_SUFFIX}"
     assert proposal_text_amendment(SPEC, "x").append_text.startswith("\n\n")
+
+
+# --- Codex review 3 ------------------------------------------------------------------------------------
+
+
+def _chunk(index: int, delta: dict[str, object], finish: str | None = None) -> bytes:
+    choice = {"index": index, "delta": delta, "finish_reason": finish}
+    chunk = {"id": "c", "object": "chat.completion.chunk", "choices": [choice]}
+    return f"data: {json.dumps(chunk)}\n\n".encode()
+
+
+async def test_stream_with_more_than_one_choice_gets_no_decision() -> None:
+    data = b"".join(
+        [
+            _chunk(0, {"role": "assistant", "content": "A"}),
+            _chunk(1, {"role": "assistant", "content": "B"}),
+            _chunk(0, {}, "stop"),
+            _chunk(1, {}, "stop"),
+            b"data: [DONE]\n\n",
+        ]
+    )
+    out, seen = await _run(data, proposal_text_amendment(SPEC, "A"))
+    assert out == data and seen == []
+
+
+def test_json_with_more_than_one_choice_has_no_reply() -> None:
+    data = upstream_json("A")
+    data["choices"].append({**data["choices"][0], "index": 1})
+    assert reply_from_completion(data) is None
+
+
+async def test_stream_text_in_finish_chunk_comes_before_the_amendment() -> None:
+    data = upstream_sse("Klaar").replace(
+        b'"delta": {}, "finish_reason": "stop"', b'"delta": {"content": "."}, "finish_reason": "stop"'
+    )
+    out, seen = await _run(data, proposal_text_amendment(SPEC, "Klaar."))
+    assert seen[0].content == "Klaar."
+    parsed = parse_with_openai_sdk(out, stream=True)
+    assert parsed["content"] == f"Klaar.\n\nEen issue? {TEXT_MODE_SUFFIX}"
+    assert parsed["finish"] == ["stop"] and parsed["usage"] == 15
+
+
+async def test_stream_upstream_error_flushes_held_events_and_propagates() -> None:
+    data = upstream_sse("Ik maak een PR.", [PR_CALL])
+    cut = data.split(b"data: [DONE]")[0] + b"data: [DO"
+    seen: list[AssistantReply] = []
+
+    async def source() -> AsyncIterator[bytes]:
+        async for piece in _source(cut):
+            yield piece
+        raise ConnectionError("upstream gone")
+
+    async def on_finish(reply: AssistantReply) -> Amendment | None:
+        seen.append(reply)
+        return None
+
+    out: list[bytes] = []
+    with pytest.raises(ConnectionError):
+        async for piece in inspect_stream(source(), on_finish):
+            out.append(piece)
+    assert b"".join(out) == cut and seen == []
+
+
+async def test_stream_error_event_after_finish_gets_no_decision() -> None:
+    error = b'data: {"error": {"message": "overloaded"}}\n\n'
+    data = upstream_sse("Klaar.").replace(b"data: [DONE]", error + b"data: [DONE]")
+    out, seen = await _run(data, proposal_text_amendment(SPEC, "Klaar."))
+    assert out == data and seen == []
+
+
+async def test_stream_trailing_whitespace_is_kept() -> None:
+    data = upstream_sse("Klaar.") + b"\n"
+    out, _ = await _run(data, None)
+    assert out == data

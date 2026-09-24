@@ -6,6 +6,7 @@ Keep it free of I/O.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -36,12 +37,40 @@ class ProposalSpec:
     decline_description: str = "Ga door zonder"
 
 
+# A trigger looks at no more than this many characters of a tool call's arguments (DECISIONS.md #35).
+TRIGGER_MAX_CHARS = 8_000
+_WHITESPACE = re.compile(r"\s+")
+
+
+def _string_values(value: Any) -> list[str]:
+    """All strings in a decoded JSON value, depth first (keys left out)."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [s for v in value.values() for s in _string_values(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in _string_values(v)]
+    return []
+
+
+def trigger_text(arguments: str) -> str:
+    """What a trigger is matched against: the string values of the arguments JSON (the raw string if
+    it is no JSON), joined, every run of whitespace made one space, cut to TRIGGER_MAX_CHARS
+    (DECISIONS.md #34, #35)."""
+    try:
+        text = " ".join(_string_values(json.loads(arguments)))
+    except ValueError:
+        text = arguments
+    return _WHITESPACE.sub(" ", text)[:TRIGGER_MAX_CHARS]
+
+
 @dataclass(frozen=True)
 class Trigger:
     """A cheap pattern on a tool call the model wants to make. Only a match makes the Gateway run a
     Decision for a Block Rule before the client executes the tool call (DECISIONS.md #28)."""
 
-    # Regular expression, matched case-insensitively against the tool call's arguments (JSON string).
+    # Regular expression, matched case-insensitively against `trigger_text(arguments)`. Keep it simple:
+    # the workflow is trusted config, but the regex runs on the event loop (DECISIONS.md #35).
     pattern: str
     # Optional tool names; when given, the tool call's name must be one of them.
     tools: tuple[str, ...] = ()
@@ -49,7 +78,7 @@ class Trigger:
     def matches(self, tool_name: str, arguments: str) -> bool:
         if self.tools and tool_name not in self.tools:
             return False
-        return re.search(self.pattern, arguments, re.IGNORECASE) is not None
+        return re.search(self.pattern, trigger_text(arguments), re.IGNORECASE) is not None
 
 
 @dataclass(frozen=True)

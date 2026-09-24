@@ -74,11 +74,12 @@ OnFinish = Callable[[AssistantReply], Awaitable[Amendment | None]]
 
 
 def reply_from_completion(data: Any) -> AssistantReply | None:
-    """The reply in a chat.completion object, or None when it has no usable choice 0."""
+    """The reply in a chat.completion object, or None when it has no usable choice 0 or more than one
+    choice (`n > 1`: no Decision, DECISIONS.md #33)."""
     if not isinstance(data, dict):
         return None
     choices = data.get("choices")
-    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
         return None
     choice = choices[0]
     message = _as_dict(choice.get("message"))
@@ -154,6 +155,14 @@ def _choice0(chunk: dict[str, Any] | None) -> dict[str, Any] | None:
     return None
 
 
+def _other_choice(chunk: dict[str, Any] | None) -> bool:
+    """Whether the chunk carries a choice other than index 0 (`n > 1`)."""
+    choices = (chunk or {}).get("choices")
+    if not isinstance(choices, list):
+        return False
+    return len(choices) > 1 or any(isinstance(c, dict) and (c.get("index") or 0) != 0 for c in choices)
+
+
 def _sse(chunk: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode()
 
@@ -209,6 +218,10 @@ def _amended_events(held: list[_Event], amendment: Amendment, next_index: int) -
         if is_finish:
             finished = True
             base = {k: v for k, v in ev.chunk.items() if k not in ("choices", "usage")}
+            if delta:
+                # The model's own last delta goes first, the Amendment after it.
+                out.append(_sse({**base, "choices": [{**choice, "delta": delta, "finish_reason": None}]}))
+                delta = {}
 
             def extra(d: dict[str, Any], base: dict[str, Any] = base) -> bytes:
                 return _sse(
@@ -234,14 +247,18 @@ def _amended_events(held: list[_Event], amendment: Amendment, next_index: int) -
 async def inspect_stream(source: AsyncIterator[bytes], on_finish: OnFinish) -> AsyncIterator[bytes]:
     """Relay an upstream SSE stream, holding back tool-call deltas and the finish, and apply the
     Amendment `on_finish` returns once the upstream stream is complete. Fail-open: an exception in
-    `on_finish` (or a stream without a finish) leaves the held events unchanged."""
+    `on_finish`, a stream without a finish, an upstream `error` event or more than one choice leaves the
+    held events unchanged. When upstream breaks off, the held bytes go out before the exception."""
     buffer = b""
     held: list[_Event] = []
     holding = False
+    unusable = False  # an `error` event or a choice other than 0: no Decision
     collector = _Collector()
 
     def handle(ev: _Event) -> bytes | None:
-        nonlocal holding
+        nonlocal holding, unusable
+        if ev.chunk is not None and ("error" in ev.chunk or _other_choice(ev.chunk)):
+            unusable = True
         choice = _choice0(ev.chunk)
         if choice is not None:
             collector.add(choice)
@@ -253,24 +270,32 @@ async def inspect_stream(source: AsyncIterator[bytes], on_finish: OnFinish) -> A
             return None
         return ev.raw
 
-    async for data in source:
-        buffer += data
-        while True:
-            match = _EVENT_END.search(buffer)
-            if match is None:
-                break
-            raw, buffer = buffer[: match.end()], buffer[match.end() :]
-            out = handle(_parse_event(raw))
-            if out is not None:
-                yield out
-    if buffer.strip():
+    try:
+        async for data in source:
+            buffer += data
+            while True:
+                match = _EVENT_END.search(buffer)
+                if match is None:
+                    break
+                raw, buffer = buffer[: match.end()], buffer[match.end() :]
+                out = handle(_parse_event(raw))
+                if out is not None:
+                    yield out
+    except Exception:
+        # Upstream broke off: what was received goes out unchanged, without a Decision.
+        for ev in held:
+            yield ev.raw
+        if buffer:
+            yield buffer
+        raise
+    if buffer:
         out = handle(_parse_event(buffer))
         if out is not None:
             yield out
 
     amendment: Amendment | None = None
     reply = collector.reply()
-    if reply.finish_reason is not None:
+    if reply.finish_reason is not None and not unusable:
         try:
             amendment = await on_finish(reply)
         except Exception:  # noqa: BLE001 - fail-open: never break the model's reply

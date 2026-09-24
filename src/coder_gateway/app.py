@@ -285,6 +285,10 @@ def create_app(
             log.info("conv=%s turn=%d req=%d forward stream=%s", conv.id, conv.turn, conv.requests, stream)
         if decider is None:
             return await upstream.forward(body, vm)
+        if body.get("n") not in (None, 1):
+            # More than one choice: no Decision, the reply passes unchanged (DECISIONS.md #33).
+            log.info("conv=%s turn=%d n=%s passthrough (more than one choice)", conv.id, turn, body.get("n"))
+            return await upstream.forward(body, vm)
         # No Decision here: the reply is judged once it is complete (DECISIONS.md #28).
         return await upstream.forward(body, vm, on_finish=make_on_finish(vm, conv, turn, body, messages))
 

@@ -293,3 +293,26 @@ Turn, of een assistant-bericht met een triggerende tool call. Twee nieuwe fixtur
 `long_conversation_early_issue_lost` had `flag_no_spec: false`, maar er komt geen spec in voor.
 Elke Jev-run gaf 0,95 of hoger. De ground truth is nu `true`.
 Resultaat op `full` (21 fixtures, Jev, twee runs): 100% goed, gemiddeld ~0,5 s, p95 ~1 s.
+
+## 33. Meer dan één choice (`n > 1`): geen Decision
+Vraagt een request om meer dan één antwoord (`n > 1`), of bevat het antwoord een choice met een
+andere index dan 0, dan gaat het antwoord ongewijzigd door, zonder Decision. De Gateway leest en
+wijzigt alleen choice 0. Bij meerdere choices raakten verzameling en aanpassing door elkaar
+(Codex-review 3, #1). Opencode stuurt nooit `n > 1`, dus dit kost in de praktijk niets.
+
+## 34. Trigger kijkt naar de uitgepakte argumenten
+De trigger zocht in de JSON-tekst van de argumenten. `{"command":"git\u0020push"}`, een tab of
+`git -C /pad push` ontsnapten daardoor aan de Block-check. Nu pakt de Gateway de JSON uit en plakt
+alle tekstwaarden aan elkaar; is het geen JSON, dan telt de ruwe tekst. Elke reeks witruimte wordt
+één spatie. De standaard-trigger in `workflows/fwd-default.yaml` vangt ook globale git-opties:
+`\bgit\b(\s+-\S+(\s+[^\s-]\S*)?)*\s+push\b`, plus `gh pr create` en `glab mr create` met
+willekeurige witruimte.
+
+## 35. Trigger-regexes blijven simpel; de Gateway kijkt naar de eerste 8.000 tekens
+Een regex met veel backtracking kan de event loop stilzetten. De workflow is config van het team
+zelf, dus vertrouwd: de Gateway houdt Python `re` en gebruikt geen aparte regex-engine. Wel kijkt
+een trigger naar hooguit de eerste 8.000 tekens van de uitgepakte argumenten. Schrijf triggers als
+eenvoudige patronen zonder geneste herhaling die op dezelfde tekst kan passen. Zo is in de
+standaard-trigger een optiewaarde nooit iets dat met `-` begint; dan is er maar één manier om te
+matchen.
+

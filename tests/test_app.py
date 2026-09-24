@@ -330,6 +330,16 @@ async def test_tool_call_without_trigger_is_unchanged_without_decision(stream: b
         assert r.json()["choices"][0]["message"]["tool_calls"][0]["id"] == "call_ls"
 
 
+@STREAMS
+async def test_request_with_more_than_one_choice_gets_no_decision(stream: bool) -> None:
+    decider = FakeDecider(make_decision("propose_issue"))
+    h = Harness(decider)
+    r = await h.chat({**agent_body(user("x"), stream=stream), "n": 2})
+    assert r.status_code == 200 and decider.inputs == []
+    reply = parse_with_openai_sdk(r.content, stream=stream)
+    assert reply["content"] == "upstream" and reply["tool_calls"] == []
+
+
 # --- Flags ---------------------------------------------------------------------------------------------
 
 
