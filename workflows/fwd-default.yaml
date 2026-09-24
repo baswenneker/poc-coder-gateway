@@ -33,12 +33,12 @@ rules:
     threshold: 0.7
     proposal:
       question: >-
-        Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?
-      header: Issue aanmaken?
-      accept_label: Ja, maak een issue
-      accept_description: Maak een issue aan voor dit werk
-      decline_label: Nee, niet nodig
-      decline_description: Geen issue voor dit werk
+        No issue has been mentioned for this work. Shall we create one so it is traceable?
+      header: Create issue?
+      accept_label: Yes, create an issue
+      accept_description: Create an issue for this work
+      decline_label: No, not needed
+      decline_description: No issue for this work
 
   - id: flag_no_spec
     description: Code changes are based on a discussed spec file.
@@ -68,6 +68,6 @@ rules:
       # option value never starts with '-', so the regex stays linear (DECISIONS.md #34, #35).
       pattern: '\bgh\s+pr\s+create\b|\bglab\s+mr\s+create\b|\bgit\b(\s+-\S+(\s+[^\s-]\S*)?)*\s+push\b'
     block_message: >-
-      De Gateway heeft deze stap tegengehouden: het model wilde een pull request aanmaken of code
-      pushen, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging.
-      Draai eerst de tests en laat zien dat ze slagen; vraag daarna opnieuw om de pull request.
+      The Gateway stopped this step: the model wanted to open a pull request or push code, but this
+      conversation does not show the tests passing after the last change. Run the tests first and
+      show that they pass; then ask for the pull request again.

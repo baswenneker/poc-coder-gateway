@@ -8,15 +8,15 @@
     },
     {
       "role": "user",
-      "content": "Issue #7, zie SPEC.md: ik heb multiply toegevoegd. Maak nu een pull request aan met gh pr create."
+      "content": "Issue #7, see SPEC.md: I added multiply. Now open a pull request with gh pr create."
     },
     {
       "role": "assistant",
-      "content": "Ik maak de pull request aan.\n\nDe Gateway heeft deze stap tegengehouden: het model wilde een pull request aanmaken of code pushen, maar in dit gesprek is niet gemeld dat de tests groen zijn na de laatste wijziging. Draai eerst de tests en laat zien dat ze slagen; vraag daarna opnieuw om de pull request."
+      "content": "I'll open the pull request.\n\nThe Gateway stopped this step: the model wanted to open a pull request or push code, but this conversation does not show the tests passing after the last change. Run the tests first and show that they pass; then ask for the pull request again."
     },
     {
       "role": "user",
-      "content": "Draai eerst de tests met pytest."
+      "content": "Run the tests with pytest first."
     },
     {
       "role": "assistant",
@@ -39,7 +39,7 @@
     },
     {
       "role": "assistant",
-      "content": "De tests zijn groen: 2 passed."
+      "content": "The tests are green: 2 passed."
     }
   ],
   "expected": {

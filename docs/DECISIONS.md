@@ -1,318 +1,320 @@
-# Keuzelogboek
+# Decision log
 
-Keuzes die tijdens de autonome bouw zijn gemaakt, met reden. Nieuwste onderaan.
-Termen volgen `CONTEXT.md`.
+Choices made during the autonomous build, with the reasoning. Newest at the bottom.
+Terms follow `CONTEXT.md`.
 
-## 1. Opencode stuurt wél een session-id; fingerprint blijft als terugval
-Het plan zegt dat opencode geen session-id stuurt. Een afgevangen request van opencode 1.18.32
-bevat de headers `x-session-id` en `x-session-affinity`. De Gateway gebruikt `x-session-id` als die
-er is. Anders berekent hij de Fingerprint uit de eerste user-berichten. Zo werkt het ook met clients
-zonder die header.
+## 1. Opencode does send a session id; the fingerprint stays as a fallback
+The plan says opencode sends no session id. A captured request from opencode 1.18.32
+contains the headers `x-session-id` and `x-session-affinity`. The Gateway uses `x-session-id` when
+it is present. Otherwise it computes the Fingerprint from the first user messages. That way it also
+works with clients that do not send the header.
 
-## 2. Requests zonder tools krijgen geen Decision
-Opencode stuurt per beurt ook een aparte request om een titel te genereren (andere system prompt,
-geen `tools`). Die hoort niet bij het werk van de Developer. De Gateway stuurt requests zonder
-`tools` ongewijzigd door (alleen het model wordt vervangen) en neemt geen Decision.
+## 2. Requests without tools get no Decision
+Each turn, opencode also sends a separate request to generate a title (different system prompt,
+no `tools`). It is not part of the Developer's work. The Gateway forwards requests without
+`tools` unchanged (only the model is replaced) and makes no Decision.
 
-## 3. Proposal gebruikt opencode's `question`-tool, met tool-call-id `gateway_proposal_<n>`
-Het plan: injectie is een tool call met vast id `gateway_proposal`. Een tool call werkt alleen als de
-client die tool kent. Opencode biedt in de TUI en server-modus een `question`-tool aan; die toont de
-vraag met keuzeknoppen aan de Developer. De Gateway geeft de tool call daarom de naam `question` en
-een id dat begint met `gateway_proposal`. Een volgnummer maakt het id uniek, omdat OpenAI dubbele
-tool-call-ids in één conversatie kan weigeren. Het antwoord komt terug als tool-result met dat id.
+## 3. A Proposal uses opencode's `question` tool, with tool call id `gateway_proposal_<n>`
+The plan: the injection is a tool call with the fixed id `gateway_proposal`. A tool call only works
+if the client knows the tool. In the TUI and server mode, opencode offers a `question` tool, which
+shows the question to the Developer with choice buttons. The Gateway therefore names the tool call
+`question` and gives it an id that starts with `gateway_proposal`. A sequence number makes the id
+unique, because OpenAI may reject duplicate tool call ids within one conversation. The answer comes
+back as a tool result with that id.
 
-Terugval: biedt de client geen `question`-tool aan (bijvoorbeeld `opencode run`, dat die tool uitzet),
-dan stuurt de Gateway het voorstel als gewone assistant-tekst. Het volgende user-bericht geldt dan
-als antwoord.
+Fallback: if the client offers no `question` tool (for example `opencode run`, which disables that
+tool), the Gateway sends the Proposal as plain assistant text. The next user message then counts as
+the answer.
 
-## 4. Proposal vervangt het upstream-antwoord van die request
-Vervangen door #28.
+## 4. A Proposal replaces the upstream reply for that request
+Superseded by #28.
 
-Bij een Proposal stuurt de Gateway de request niet upstream, maar antwoordt hij zelf met de
-voorstel-tool-call. Het antwoord van de Developer gaat in de volgende request wel upstream, dus het
-model ziet vraag en antwoord en gaat daarop verder. Dat is eenvoudiger dan een tool call aan een
-lopende upstream-stream toevoegen, en het model blijft niet geblokkeerd: bij "nee" gaat het gewoon door.
+On a Proposal, the Gateway does not send the request upstream but answers itself with the Proposal
+tool call. The Developer's answer does go upstream in the next request, so the model sees question
+and answer and carries on from there. This is simpler than adding a tool call to a running upstream
+stream, and the model is not blocked: on "no" it simply continues.
 
-## 5. Decision synchroon in het request-pad, fail-open
-Vervangen door #28.
+## 5. Decision synchronous in the request path, fail-open
+Superseded by #28.
 
-Jev antwoordt in 70-500 ms (gemeten: ~230 ms). De Gateway wacht daarom op de Decision vóór hij
-upstream gaat, met een timeout. Faalt Jev of loopt de timeout af, dan probeert hij de LLM-terugval.
-Faalt die ook, dan gaat de request zonder Intervention door (fail-open). Een kapotte Decider mag de
-Developer niet stilzetten.
+Jev answers in 70-500 ms (measured: ~230 ms). The Gateway therefore waits for the Decision before
+going upstream, with a timeout. If Jev fails or the timeout expires, it tries the LLM fallback. If
+that fails too, the request proceeds without an Intervention (fail-open). A broken Decider must not
+bring the Developer to a halt.
 
-## 6. Eén ja/nee-vraag per Rule in plaats van één enum
-Het plan noemt één enum `{none, propose_issue, flag_no_spec, block_pr}`. Meerdere Rules kunnen
-tegelijk gebroken zijn (bijvoorbeeld geen issue én geen spec). Een enum kiest er maar één. De Decider
-stelt Jev daarom per Rule een `noul`-vraag (ja/nee met kans) in één call. Elke Rule heeft een eigen
-drempel.
+## 6. One yes/no question per Rule instead of one enum
+The plan names a single enum `{none, propose_issue, flag_no_spec, block_pr}`. Several Rules can be
+broken at the same time (for example no issue and no spec). An enum picks only one. The Decider
+therefore asks Jev one `noul` question per Rule (yes/no with a probability) in a single call. Each
+Rule has its own threshold.
 
-## 7. Block kijkt naar de request, niet naar het antwoord van het model
-Vervangen door #28.
+## 7. A Block looks at the request, not at the model's reply
+Superseded by #28.
 
-De Decision valt vóór de request upstream gaat. Een Block vangt dus het verzoek van de Developer
-("maak een PR") of een eerdere `gh pr create`-poging in de Transcript. Een `gh pr create` die het
-model zelf in zijn antwoord bedenkt, ziet de Gateway pas bij de volgende request. Het uitvoeren van
-die tool call gebeurt dan al in de client. Beperking van de POC.
+The Decision is made before the request goes upstream. A Block therefore catches the Developer's
+request ("create a PR") or an earlier `gh pr create` attempt in the Transcript. A `gh pr create`
+that the model comes up with in its own reply is only seen by the Gateway on the next request. By
+then the client has already run that tool call. A limitation of the POC.
 
-## 8. Benchmark bouwt de Decider via `build_decider(fallback="none")`, niet rechtstreeks
-`src/coder_gateway/benchmark.py` moet Jev/LLM "kaal" meten, zonder terugval die fouten verbergt.
-In plaats van `JevDecider`/`LLMDecider` rechtstreeks te importeren en te construeren (met interne
-constructor-argumenten die bij de Deciders horen, niet bij de benchmark), roept de benchmark de
-bestaande `build_decider(primary=..., fallback="none", ...)` aan. Dat is al de ene centrale plek
-waar een naam naar een Decider wordt vertaald; `fallback="none"` levert dezelfde "geen terugval"-
-garantie als rechtstreeks bouwen, zonder dat de benchmark de constructor-signatuur van elke Decider
-hoeft te kennen. Nieuwe strategieën/Deciders (bijv. `summary_last_10`) blijven zo op één plek toevoegen.
+## 8. The benchmark builds the Decider via `build_decider(fallback="none")`, not directly
+`src/coder_gateway/benchmark.py` must measure Jev/LLM "bare", without a fallback that hides errors.
+Instead of importing and constructing `JevDecider`/`LLMDecider` directly (with internal constructor
+arguments that belong to the Deciders, not to the benchmark), the benchmark calls the existing
+`build_decider(primary=..., fallback="none", ...)`. That is already the one central place where a
+name is mapped to a Decider; `fallback="none"` gives the same "no fallback" guarantee as building
+directly, without the benchmark having to know every Decider's constructor signature. New
+strategies/Deciders (e.g. `summary_last_10`) can thus still be added in one place.
 
-## 9. Ground truth in fixtures is altijd over de volle conversatie, per strategie wordt alleen de
-Transcript verkleind
-`benchmark/fixtures/*.json` heeft één `expected` per fixture, niet één per strategie. Dat is
-expres: `expected` is de juiste Decision zoals de Gateway die zou geven als hij het hele gesprek
-zag. Een strategie als `last_10` mag daar juist slechter op scoren dan `full` — dat verschil in
-accuracy per strategie, niet een aangepaste ground truth, is wat de tabel moet laten zien (zie
-`long_conversation_early_issue_lost` en `long_conversation_early_spec_lost`).
+## 9. Ground truth in fixtures always covers the full conversation; each strategy only shrinks the
+Transcript
+`benchmark/fixtures/*.json` has one `expected` per fixture, not one per strategy. That is
+deliberate: `expected` is the correct Decision as the Gateway would make it if it saw the whole
+conversation. A strategy such as `last_10` may well score worse on it than `full` — that difference
+in accuracy per strategy, not an adjusted ground truth, is what the table should show (see
+`long_conversation_early_issue_lost` and `long_conversation_early_spec_lost`).
 
-## 10. Fouten van de Decider zelf tellen als "error", los van accuracy
-Als `decider.decide()` een exception gooit of een `Decision` met `error` teruggeeft, telt de
-benchmark dat als `errors`, apart van de accuracy-teller (die alleen over geslaagde calls gaat).
-Een kapotte call zou anders de accuracy kunstmatig verlagen en het verschil tussen "Decider gaf het
-verkeerde antwoord" en "Decider gaf helemaal geen antwoord" verdoezelen.
+## 10. Errors of the Decider itself count as "error", separate from accuracy
+If `decider.decide()` raises an exception or returns a `Decision` with `error` set, the benchmark
+counts it under `errors`, separately from the accuracy counter (which only covers successful calls).
+Otherwise a broken call would artificially lower accuracy and blur the difference between "the
+Decider gave the wrong answer" and "the Decider gave no answer at all".
 
-## 11. Een Proposal die niet beantwoord wordt, telt als afgewezen
-Toont de Gateway een Proposal via de `question`-tool en begint de Developer een nieuwe Turn zonder
-tool-result voor die vraag (bijvoorbeeld afgebroken), dan zet de Gateway de Proposal op `declined`
-(event `proposal_expired`). Anders blijft hij eeuwig open en komt hij nooit meer terug.
-Een Proposal die met iets anders dan ja/nee is beantwoord (`answered`) telt ook als afgewezen: hij
-mag terugkomen zolang de Rule gebroken blijft.
+## 11. An unanswered Proposal counts as declined
+If the Gateway shows a Proposal via the `question` tool and the Developer starts a new Turn without a
+tool result for that question (for example after aborting), the Gateway sets the Proposal to
+`declined` (event `proposal_expired`). Otherwise it would stay open forever and never come back.
+A Proposal answered with anything other than yes/no (`answered`) also counts as declined: it may
+come back as long as the Rule stays broken.
 
-## 12. Een afgewezen Proposal komt pas terug in de Turn ná het antwoord
-In tekst-modus komt het antwoord ("nee") pas in de volgende Turn binnen. Zonder deze regel zou de
-Gateway in diezelfde Turn meteen opnieuw vragen. Daarom: niet opnieuw voorstellen in de Turn waarin
-de Proposal beantwoord is. Ook geldt maximaal één Proposal per Turn per Conversation, over alle
-Rules heen.
+## 12. A declined Proposal only comes back in the Turn after the answer
+In text mode the answer ("no") only arrives in the next Turn. Without this rule the Gateway would ask
+again straight away in that same Turn. Hence: do not propose again in the Turn in which the Proposal
+was answered. Also, at most one Proposal per Turn per Conversation, across all Rules.
 
-## 13. Alleen Rules met ingreep `flag` worden een Flag
-Een gebroken `propose`- of `block`-Rule leidt tot een Proposal of Block, niet tot een Flag. De
-Decision zelf (alle kansen) staat wel in de read-API (`last_decision`) en op het dashboard. Een
-mislukte Decision laat bestaande Flags staan.
+## 13. Only Rules with intervention `flag` become a Flag
+A broken `propose` or `block` Rule leads to a Proposal or Block, not to a Flag. The Decision itself
+(all probabilities) is available in the read API (`last_decision`) and on the dashboard. A failed
+Decision leaves existing Flags in place.
 
-## 14. Titel-requests krijgen ook `max_completion_tokens`, maar geen system prompt
-Requests zonder `tools` gaan ongewijzigd door (#2), behalve het model en `max_tokens` →
-`max_completion_tokens`: gpt-5.x weigert `max_tokens`, dus zonder die omzetting faalt de titel.
-Het system prompt van het Virtual Model gaat alleen mee met agent-requests.
+## 14. Title requests also get `max_completion_tokens`, but no system prompt
+Requests without `tools` pass through unchanged (#2), except for the model and `max_tokens` →
+`max_completion_tokens`: gpt-5.x rejects `max_tokens`, so without that conversion the title fails.
+The Virtual Model's system prompt is only added to agent requests.
 
-## 15. Timeout rond de hele Decision is 2 × `timeout_s` + 0,5 s
-`timeout_s` geldt per Decider-call (Jev, daarna de LLM-terugval). De Gateway zet er zelf nog een
-buitenste timeout omheen die ruimte laat voor beide calls. Loopt die af, dan fail-open (#5).
+## 15. The timeout around the whole Decision is 2 × `timeout_s` + 0.5 s
+`timeout_s` applies per Decider call (Jev, then the LLM fallback). The Gateway wraps an outer
+timeout around them that leaves room for both calls. If it expires, the Gateway fails open (#5).
 
-## 16. Proposal-nummer overleeft een herstart
-`gateway_proposal_<n>`: n is één hoger dan het hoogste nummer in de store óf in de berichten van de
-request. Na een herstart van de Gateway (store is in-memory) ontstaan zo geen dubbele tool-call-ids.
-Live getest: OpenAI accepteert een eerdere `gateway_proposal_1`-tool-call met tool-result in de
-geschiedenis.
+## 16. The Proposal number survives a restart
+`gateway_proposal_<n>`: n is one higher than the highest number in the store or in the request's
+messages. After a Gateway restart (the store is in-memory) this prevents duplicate tool call ids.
+Tested live: OpenAI accepts an earlier `gateway_proposal_1` tool call with a tool result in the
+history.
 
-## 17. Standaardstrategie `full`, timeout per Decider 3 s
-De benchmark (18 testgesprekken, Jev) gaf: hele conversatie 94% goed, laatste 10 berichten 83%,
-laatste 10 met ingekorte tool-output 89%. De fouten bij de kortere strategieën zitten in lange
-gesprekken waar het issue of de spec vroeg genoemd is. Jev gebruikte bij `full` gemiddeld ~1.400
-input-tokens, dus de kosten blijven klein. Daarom staat `config/gateway.yaml` op `full`. De
-gemiddelde latency was ~0,9 s met een p95 van ~2,3 s; een timeout van 1,5 s zou dus vaak naar de
-terugval springen. De timeout per Decider-call staat daarom op 3 s. Resultaten: `var/benchmark/`.
+## 17. Default strategy `full`, timeout per Decider 3 s
+The benchmark (18 test conversations, Jev) gave: full conversation 94% correct, last 10 messages
+83%, last 10 with truncated tool output 89%. The errors in the shorter strategies are in long
+conversations where the issue or the spec was mentioned early. With `full`, Jev used ~1,400 input
+tokens on average, so the cost stays small. That is why `config/gateway.yaml` is set to `full`.
+Average latency was ~0.9 s with a p95 of ~2.3 s; a timeout of 1.5 s would therefore often jump to
+the fallback. The timeout per Decider call is therefore set to 3 s. Results: `var/benchmark/`.
 
-## 18. `compact_transcript` kort alleen nog met een zeer ruime head+tail-cap, niet meer vast op
-2000 tekens
-Elke `role='tool'`-boodschap werd altijd tot 2000 tekens afgekapt, ongeacht de strategie. Bij een
-lang testlog met de samenvatting aan het eind ("42 passed") verdween precies dat stukje, ook bij
-strategie `full`/`last_10` die de tool-output juist volledig wilden laten zien — een vals Block
-na groene tests. Inkorten naar strategie is al het werk van `apply_strategy` (bijv.
-`last_10_truncated` zet oudere tool-output al op `<truncated>`); `compact_transcript` mag dat niet
-nog eens overdoen. Nu geldt alleen een generieke veiligheidsklep tegen extreem grote tool-output
-(> 20.000 tekens): eerste 1.500 + laatste 3.000 tekens met een `...[N chars omitted]...`-merker
-ertussen, zodat een samenvatting aan het eind altijd overleeft.
+## 18. `compact_transcript` now only truncates with a very generous head+tail cap, no longer at a
+fixed 2000 characters
+Every `role='tool'` message was always cut to 2000 characters, regardless of strategy. With a long
+test log that has the summary at the end ("42 passed"), exactly that part disappeared, even under
+the `full`/`last_10` strategies that meant to show the tool output in full — a false Block after
+green tests. Truncating per strategy is already the job of `apply_strategy` (e.g.
+`last_10_truncated` already sets older tool output to `<truncated>`); `compact_transcript` must not
+do it again. Now only a generic safety valve applies against extremely large tool output
+(> 20,000 characters): the first 1,500 + last 3,000 characters with a `...[N chars omitted]...`
+marker in between, so a summary at the end always survives.
 
-## 19. `build_decider(fallback="none")` levert een `SoloDecider`, geen `FallbackDecider` met
-`NoneDecider` als terugval
-Zoals gebouwd wrapte `fallback="none"` de primary alsnog in `FallbackDecider(primary,
-NoneDecider(), timeout_s)`. Een primary-exception liet de terugval (`NoneDecider`) dan gewoon
-slagen: een Decision met alle Rules niet-gebroken, `error=None` en `latency_ms=0.0` — niet te
-onderscheiden van een correct "niets gebroken"-antwoord. In de benchmark (die juist met
-`fallback="none"` de Decider kaal wil meten, zie #8) telde een kapotte call zo als een juiste
-voorspelling in plaats van als `errors` (#10).
-Nieuwe klasse `SoloDecider` (`deciders/fallback.py`): draait alleen de primary, met timeout; bij
-exception/timeout faalt hij open (geen gebroken Rules), mét `error` gezet en `latency_ms` van de
-mislukte poging. `build_decider` gebruikt `SoloDecider` wanneer `fallback="none"` en `primary !=
-"none"`. De Gateway zelf (`config/gateway.yaml`: `fallback: llm`) blijft ongewijzigd via
-`FallbackDecider` lopen, en blijft dus fail-open op dezelfde manier als voorheen (#5).
+## 19. `build_decider(fallback="none")` returns a `SoloDecider`, not a `FallbackDecider` with
+`NoneDecider` as fallback
+As built, `fallback="none"` still wrapped the primary in `FallbackDecider(primary,
+NoneDecider(), timeout_s)`. A primary exception then simply let the fallback (`NoneDecider`)
+succeed: a Decision with all Rules not broken, `error=None` and `latency_ms=0.0` — indistinguishable
+from a correct "nothing broken" answer. In the benchmark (which uses `fallback="none"` precisely to
+measure the Decider bare, see #8), a broken call thus counted as a correct prediction instead of
+under `errors` (#10).
+New class `SoloDecider` (`deciders/fallback.py`): runs only the primary, with a timeout; on
+exception/timeout it fails open (no broken Rules), with `error` set and the `latency_ms` of the
+failed attempt. `build_decider` uses `SoloDecider` when `fallback="none"` and `primary !=
+"none"`. The Gateway itself (`config/gateway.yaml`: `fallback: llm`) keeps running through
+`FallbackDecider` unchanged, and so stays fail-open in the same way as before (#5).
 
-## 20. Requests van een opencode-subagent gaan door zonder Decision
-De `task`-tool van opencode start een subagent (bijvoorbeeld `explore`) met een eigen sessie. Die
-requests hebben de header `x-parent-session-id` (live gezien in opencode 1.18.32). Daar praat het
-hoofdmodel met de subagent, niet de Developer. Een Proposal in tekst-modus zou dan door het
-hoofdmodel beantwoord worden. Ook toonde `/gateway/status` soms de subagent als laatste
-Conversation. Daarom: bij `x-parent-session-id` stuurt de Gateway de request door, met het system
-prompt van het Virtual Model, maar zonder Decision en zonder eigen Conversation. Het resultaat van
-de subagent komt als tool-result terug in de Conversation van de Developer; daar valt de Decision
-wel. Beperking: een `gh pr create` in een subagent ziet de Gateway niet.
+## 20. Requests from an opencode subagent pass through without a Decision
+Opencode's `task` tool starts a subagent (for example `explore`) with its own session. Those
+requests carry the header `x-parent-session-id` (seen live in opencode 1.18.32). There the main
+model talks to the subagent, not the Developer. A Proposal in text mode would then be answered by
+the main model. `/gateway/status` also sometimes showed the subagent as the latest Conversation.
+Hence: on `x-parent-session-id` the Gateway forwards the request, with the Virtual Model's system
+prompt, but without a Decision and without a Conversation of its own. The subagent's result comes
+back as a tool result in the Developer's Conversation; the Decision is made there. Limitation: the
+Gateway does not see a `gh pr create` inside a subagent.
 
-## 21. De Block-Rule kijkt naar het laatste bericht
-Aangepast door #28: de Rule kijkt nu naar de tool call in het laatste assistant-bericht.
+## 21. The Block Rule looks at the last message
+Amended by #28: the Rule now looks at the tool call in the last assistant message.
 
-Live gezien: na een Block vroeg de Developer "Draai eerst de tests". Jev zag het eerdere PR-verzoek
-nog in het gesprek en blokkeerde opnieuw (in de benchmark gaf de oude tekst 0,65, live boven de
-drempel van 0,7). De Developer kon de tests zo nooit laten draaien. De `broken_when` van
-`block_pr_without_tests` in `workflows/fwd-default.yaml` noemt nu expliciet het laatste bericht van
-de Developer (of de laatste `gh pr create` van het model). `ok_when` zegt dat een eerder PR-verzoek
-niet telt als het laatste bericht iets anders vraagt. Nieuwe fixture:
-`benchmark/fixtures/after_block_developer_asks_for_tests.json` (nu 0,03). De benchmark op `full`
-bleef voor deze Rule op 100%. De keuze ligt in de Rule-tekst, niet in de code: een team kan het
-per Rule anders willen.
+Seen live: after a Block the Developer asked "Run the tests first". Jev still saw the earlier PR
+request in the conversation and blocked again (in the benchmark the old text gave 0.65, live it was
+above the 0.7 threshold). The Developer could therefore never get the tests to run. The
+`broken_when` of `block_pr_without_tests` in `workflows/fwd-default.yaml` now explicitly names the
+Developer's last message (or the model's last `gh pr create`). `ok_when` says that an earlier PR
+request does not count if the last message asks for something else. New fixture:
+`benchmark/fixtures/after_block_developer_asks_for_tests.json` (now 0.03). The benchmark on `full`
+stayed at 100% for this Rule. The choice lives in the Rule text, not in the code: a team may want it
+differently per Rule.
 
-## 22. Antwoord op een Proposal: het echte opencode-formaat
-De tool-result van opencode's `question`-tool is (live afgevangen):
-`User has answered your questions: "<vraag>"="<antwoord>". You can now continue with the user's
-answers in mind.` Wegklikken geeft `The user dismissed this question`. Meerdere gekozen labels
-staan in één waarde, gescheiden door ", ". `parse_tool_answer` leest bij dit formaat alleen de
-waarde na `"<vraag>"=`. Zo kan een label in de vraagtekst de uitkomst niet beïnvloeden. Exact het
-accept-label is `accepted`, exact het decline-label is `declined`, al het andere is `answered`
-(telt als afgewezen, #11). Andere formaten gebruiken de oude, ruime regel.
-In tekst-modus zet `opencode run` een bericht met spaties tussen aanhalingstekens (`"nee, ga
-door"`). `parse_text_answer` negeert daarom leestekens aan het begin.
+## 22. Answer to a Proposal: the actual opencode format
+The tool result of opencode's `question` tool is (captured live):
+`User has answered your questions: "<question>"="<answer>". You can now continue with the user's
+answers in mind.` Dismissing it gives `The user dismissed this question`. Several selected labels
+share one value, separated by ", ". For this format, `parse_tool_answer` reads only the value after
+`"<question>"=`. That way a label inside the question text cannot affect the outcome. Exactly the
+accept label is `accepted`, exactly the decline label is `declined`, everything else is `answered`
+(counts as declined, #11). Other formats use the old, looser rule.
+In text mode, `opencode run` wraps a message containing spaces in quotes (`"no, go ahead"`).
+`parse_text_answer` therefore ignores leading punctuation.
 
-## 23. Skill `gateway-status` staat in `skills/` en gaat per project naar `.opencode/skills/`
-Opencode vindt skills in `.opencode/skills/<naam>/SKILL.md` van het project (en globaal in onder
-meer `~/.claude/skills` en `~/.agents/skills`). De skill hoort bij de Gateway, niet bij één
-project. Daarom staat het origineel in `skills/gateway-status/` van deze repo, en kopieert
-`scripts/setup-demo.sh` hem naar `.opencode/skills/` van het demo-project. De skill roept een
-klein script aan (`curl` plus `python3`), met `CODER_GATEWAY_URL` en `CODER_GATEWAY_KEY` als
-instelling. Het script toont de laatst actieve Conversation van de API key via `/gateway/status`.
-De skill weet zijn eigen sessie-id niet, dus een filter per sessie zit er niet in.
+## 23. The `gateway-status` skill lives in `skills/` and is copied per project to `.opencode/skills/`
+Opencode finds skills in the project's `.opencode/skills/<name>/SKILL.md` (and globally in, among
+others, `~/.claude/skills` and `~/.agents/skills`). The skill belongs to the Gateway, not to one
+project. That is why the original lives in `skills/gateway-status/` of this repo, and
+`scripts/setup-demo.sh` copies it to `.opencode/skills/` of the demo project. The skill calls a
+small script (`curl` plus `python3`), configured with `CODER_GATEWAY_URL` and `CODER_GATEWAY_KEY`.
+The script shows the API key's most recently active Conversation via `/gateway/status`. The skill
+does not know its own session id, so there is no per-session filter.
 
-## 24. Eén lock per Conversation rond Decision en state-update
-Codex-review 1, bevinding 2. De handler las de Conversation, wachtte op de Decider en schreef het
-resultaat daarna in de dan geldende state. Een trage request uit Turn 1 kon zo na een snelle request
-uit Turn 2 een Flag terugzetten en zijn Proposal op Turn 2 boeken. Nu houdt `app.py` per Conversation
-een `asyncio.Lock` vast vanaf `begin_request` tot en met de gekozen Intervention. Het doorsturen naar
-upstream (en het streamen) valt buiten de lock. Waarom een lock en niet "oude resultaten weggooien":
-in één proces is het de eenvoudigste sluitende oplossing, en de volgorde van requests blijft de
-volgorde van verwerken. Prijs: een tweede request van dezelfde Conversation wacht hooguit één
-Decision (begrensd door `decision_timeout_s`). Opencode stuurt per sessie toch één request tegelijk.
+## 24. One lock per Conversation around Decision and state update
+Codex review 1, finding 2. The handler read the Conversation, waited for the Decider and then wrote
+the result into whatever the state was at that moment. A slow request from Turn 1 could thus, after
+a fast request from Turn 2, restore a Flag and book its Proposal on Turn 2. Now `app.py` holds an
+`asyncio.Lock` per Conversation from `begin_request` up to and including the chosen Intervention.
+Forwarding to upstream (and streaming) happens outside the lock. Why a lock and not "discard stale
+results": in a single process it is the simplest watertight solution, and the order of requests
+stays the order of processing. Cost: a second request from the same Conversation waits for at most
+one Decision (bounded by `decision_timeout_s`). Opencode sends one request per session at a time
+anyway.
 
-## 25. Een nieuwe Turn herken je aan het laatste Developer-bericht, niet alleen aan het aantal
-Codex-review 1, bevinding 3. `conv.turn` was het hoogste aantal user-berichten ooit gezien. Kort de
-client de geschiedenis in (compaction), dan liep de Turn niet meer op: afgewezen Proposals bleven
-onderdrukt en het antwoord in tekst-modus wees naar een index in de oude geschiedenis. Nu begint een
-nieuwe Turn als het aantal user-berichten groter is dan bij de vorige request, óf als het laatste
-user-bericht een andere tekst heeft (hash). Het Turn-nummer is `max(turn + 1, aantal)`: normaal
-gelijk aan het aantal user-berichten, na compaction gewoon één hoger. Het antwoord op een Proposal in
-tekst-modus is het laatste user-bericht van de eerste request in een latere Turn; geen index meer.
-Beperking: stuurt de client na compaction een ander laatste user-bericht zonder dat de Developer iets
-zei (bijv. een synthetische "ga door"), dan telt dat als nieuwe Turn.
+## 25. A new Turn is recognised by the last Developer message, not just by the count
+Codex review 1, finding 3. `conv.turn` was the highest number of user messages ever seen. If the
+client shortened the history (compaction), the Turn stopped increasing: declined Proposals stayed
+suppressed and the text-mode answer pointed to an index in the old history. Now a new Turn starts
+when the number of user messages is greater than on the previous request, or when the last user
+message has different text (hash). The Turn number is `max(turn + 1, count)`: normally equal to the
+number of user messages, after compaction simply one higher. The text-mode answer to a Proposal is
+the last user message of the first request in a later Turn; no index any more.
+Limitation: if after compaction the client sends a different last user message without the
+Developer saying anything (e.g. a synthetic "continue"), that counts as a new Turn.
 
-## 26. Het event-log is best effort
-Codex-review 1, bevinding 5. Een fout bij het schrijven naar `var/events.jsonl` (schijf vol, geen
-rechten) brak de request af, ook na een fail-open Decision. Het bestand is een hulpmiddel om terug te
-kijken, geen onderdeel van de Decision. Nu vangt `ConversationStore` een `OSError` af, logt één
-waarschuwing (opnieuw pas nadat het schrijven weer eens gelukt is) en gaat door. De events blijven in
-het geheugen, dus de read-API en het dashboard werken gewoon.
-Codex-review 2, bevinding 3: hetzelfde geldt voor het aanmaken van de map van `var/events.jsonl` bij
-het opstarten. Lukt `mkdir` niet (geen rechten), dan logt `ConversationStore.__init__` één
-waarschuwing en start de Gateway gewoon door, zonder events-bestand.
+## 26. The event log is best effort
+Codex review 1, finding 5. An error while writing to `var/events.jsonl` (disk full, no permission)
+aborted the request, even after a fail-open Decision. The file is an aid for looking back, not part
+of the Decision. Now `ConversationStore` catches an `OSError`, logs one warning (and only again
+after a write has succeeded in between) and carries on. The events stay in memory, so the read API
+and the dashboard keep working.
+Codex review 2, finding 3: the same applies to creating the directory of `var/events.jsonl` at
+startup. If `mkdir` fails (no permission), `ConversationStore.__init__` logs one warning and the
+Gateway starts anyway, without an events file.
 
-## 27. Dashboard: open op localhost, optioneel een token
-Codex-review 1, bevinding 6. `/gateway/` heeft geen API key nodig en toont alle Virtual Models. Voor
-handmatig testen is dat handig (browser, geen header), en de Gateway bindt standaard op `127.0.0.1`.
-Nieuw: optioneel `dashboard_token` in `config/gateway.yaml`. Staat die, dan vraagt het dashboard
-`?token=<waarde>` (anders 401). `CODER_GATEWAY_HOST` kiest een ander adres; is dat geen loopback en
-staat er geen token, dan logt de Gateway bij het starten een waarschuwing. De read-API
-(`/gateway/status` enz.) blijft per Virtual Model afgeschermd met de API key.
+## 27. Dashboard: open on localhost, optionally a token
+Codex review 1, finding 6. `/gateway/` needs no API key and shows all Virtual Models. For manual
+testing that is convenient (browser, no header), and the Gateway binds to `127.0.0.1` by default.
+New: an optional `dashboard_token` in `config/gateway.yaml`. If it is set, the dashboard requires
+`?token=<value>` (otherwise 401). `CODER_GATEWAY_HOST` selects a different address; if that is not a
+loopback address and no token is set, the Gateway logs a warning at startup. The read API
+(`/gateway/status` etc.) stays protected per Virtual Model by the API key.
 
-## 28. Decision alleen aan het eind van een Turn en bij een trigger
-Eerst riep de Gateway Jev aan vóór elke request. Eén Turn telt 5 tot 20 requests, één per
-tool-call-ronde. Dat is veel calls voor weinig nieuws. Nu gaat elke request zonder Decision upstream.
-De Gateway kijkt naar het antwoord van het model.
+## 28. Decision only at the end of a Turn and on a trigger
+At first the Gateway called Jev before every request. One Turn has 5 to 20 requests, one per
+tool call round. That is a lot of calls for little new information. Now every request goes upstream
+without a Decision. The Gateway looks at the model's reply.
 
-- **Eind van de Turn.** Het antwoord heeft `finish_reason` `stop` en geen tool calls. Dan geeft het
-  model de beurt terug aan de Developer. De Gateway neemt precies hier één Decision, op de Transcript
-  plus het laatste assistant-bericht. Daarna werkt hij de Flags bij.
-- **Proposal achteraf.** Is een `propose`-Rule gebroken, dan hangt de Gateway de Proposal aan dit
-  laatste antwoord. Met `question`-tool: een extra tool call `gateway_proposal_<n>` en finish
-  `tool_calls`. Zonder: de vraag als extra tekst met "(antwoord ja of nee)". De vraag komt dus ná het
-  werk: "Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken?"
-- **Block aan de antwoordkant.** Een Block-Rule heeft een `trigger`: een regex op de argumenten van
-  een tool call, eventueel beperkt tot tool-namen. Voor `block_pr_without_tests`:
-  `gh pr create|glab mr create|git push`, zonder tool-namen, zodat het bij elke client werkt. Past een
-  tool call in het antwoord, dan neemt de Gateway een extra Decision. Is de Rule gebroken, dan laat hij
-  de tool call weg en eindigt het antwoord met de uitleg (finish `stop`). De client voert de tool call
-  dus nooit uit. Dat lost de beperking van #7 op.
-- **Streaming.** Tekst gaat live door. Tool-call-deltas houdt de Gateway vast tot het antwoord klaar
-  is; de client doet er pas iets mee na de finish. Ook de finish-chunk, de usage-chunk en `[DONE]`
-  wachten op de Decision. Zonder ingreep gaan ze byte voor byte door.
-- **Fail-open blijft.** Faalt de Decision of loopt de timeout af, dan gaat het antwoord ongewijzigd
-  door. Andere finish-redenen (`length`, `content_filter`) en upstream-fouten krijgen geen Decision.
-- **Lock (#24) blijft.** De lock per Conversation zit om Decision en state-update, niet om het
-  streamen van de tekst.
+- **End of the Turn.** The reply has `finish_reason` `stop` and no tool calls. The model is then
+  handing control back to the Developer. The Gateway makes exactly one Decision here, on the
+  Transcript plus the last assistant message. It then updates the Flags.
+- **Proposal afterwards.** If a `propose` Rule is broken, the Gateway attaches the Proposal to this
+  last reply. With the `question` tool: an extra tool call `gateway_proposal_<n>` and finish
+  `tool_calls`. Without it: the question as extra text with "(answer yes or no)". So the question
+  comes after the work: "No issue has been mentioned for this work. Shall we create one?"
+- **Block on the reply side.** A Block Rule has a `trigger`: a regex on the arguments of a tool
+  call, optionally limited to tool names. For `block_pr_without_tests`:
+  `gh pr create|glab mr create|git push`, without tool names, so that it works with any client. If a
+  tool call in the reply matches, the Gateway makes an extra Decision. If the Rule is broken, it
+  drops the tool call and ends the reply with the explanation (finish `stop`). The client therefore
+  never runs the tool call. That removes the limitation of #7.
+- **Streaming.** Text streams through live. The Gateway holds back tool call deltas until the reply
+  is complete; the client only acts on them after the finish anyway. The finish chunk, the usage
+  chunk and `[DONE]` also wait for the Decision. Without an Intervention they pass through byte for
+  byte.
+- **Fail-open stays.** If the Decision fails or the timeout expires, the reply passes through
+  unchanged. Other finish reasons (`length`, `content_filter`) and upstream errors get no Decision.
+- **The lock (#24) stays.** The per-Conversation lock wraps the Decision and the state update, not
+  the streaming of the text.
 
-Gevolg: normaal één Jev-call per Turn, plus één per triggerende tool call. Dashboard en
-`/gateway/status` tonen per Conversation `requests` en `decisions`. De log schrijft één regel per
-Decision met de reden: `end_of_turn` of `trigger:<rule_id>`.
+Result: normally one Jev call per Turn, plus one per triggering tool call. The dashboard and
+`/gateway/status` show `requests` and `decisions` per Conversation. The log writes one line per
+Decision with the reason: `end_of_turn` or `trigger:<rule_id>`.
 
-## 29. Na een Proposal in dezelfde Turn geen tweede Decision aan het eind
-Met de `question`-tool beantwoordt de Developer de Proposal binnen dezelfde Turn. Het model gaat
-daarna verder en eindigt opnieuw met `stop`. Een tweede Decision kan dan niets meer voorstellen: er
-mag maar één Proposal per Turn (#12). De Gateway slaat die Decision daarom over. Zo blijft het één
-Jev-call per Turn. Prijs: de Flags lopen pas bij de volgende Decision bij. Een trigger-Decision (Block)
-gebeurt wel altijd.
+## 29. After a Proposal in the same Turn, no second Decision at the end
+With the `question` tool, the Developer answers the Proposal within the same Turn. The model then
+continues and ends with `stop` again. A second Decision could not propose anything at that point:
+only one Proposal is allowed per Turn (#12). The Gateway therefore skips that Decision. That keeps it
+at one Jev call per Turn. Cost: the Flags only catch up at the next Decision. A trigger Decision
+(Block) always happens.
 
-## 30. Trigger alleen op Block-Rules; een Block laat alle tool calls van dat antwoord weg
-Een `trigger` op een `flag`- of `propose`-Rule is een fout bij het laden. Zo'n Rule doet pas iets aan
-het eind van de Turn, dus een trigger heeft daar geen betekenis. Een Block-Rule zonder trigger is ook
-een fout: hij zou nooit beoordeeld worden.
-Vraagt het model in één antwoord meerdere tool calls en past er één in de trigger, dan laat een Block
-ze allemaal weg. Een half uitgevoerd antwoord is lastiger te volgen dan één duidelijke stop.
-De trigger is bewust goedkoop en grof. Live zagen we hem ook afgaan op een `todowrite` en een
-`question` van het model met de tekst "gh pr create". Jev oordeelde dan "niet gebroken", want er
-werd geen PR gemaakt. Dat kost één extra call, geen onterechte Block.
+## 30. Triggers only on Block Rules; a Block drops all tool calls of that reply
+A `trigger` on a `flag` or `propose` Rule is a load-time error. Such a Rule only acts at the end of
+the Turn, so a trigger means nothing there. A Block Rule without a trigger is also an error: it
+would never be evaluated.
+If the model requests several tool calls in one reply and one of them matches the trigger, a Block
+drops them all. A half-executed reply is harder to follow than one clear stop.
+The trigger is deliberately cheap and coarse. Live we also saw it fire on a `todowrite` and on a
+`question` from the model containing the text "gh pr create". Jev then judged "not broken", because
+no PR was being created. That costs one extra call, not a wrongful Block.
 
-## 31. Een antwoord uit een oudere Turn krijgt geen Decision
-Komt het antwoord van een request binnen terwijl de Developer al een nieuwe Turn begon, dan neemt de
-Gateway geen Decision op dat antwoord. De state hoort dan al bij de nieuwe Turn. Opencode stuurt per
-sessie één request tegelijk, dus dit gebeurt alleen na afbreken.
+## 31. A reply from an older Turn gets no Decision
+If the reply to a request arrives after the Developer has already started a new Turn, the Gateway
+makes no Decision on that reply. The state by then belongs to the new Turn. Opencode sends one
+request per session at a time, so this only happens after an abort.
 
-## 32. Rule-teksten en benchmark aangepast aan beslissen achteraf
-De benchmark-fixtures eindigen nu waar de Gateway beslist: het laatste assistant-bericht van een
-Turn, of een assistant-bericht met een triggerende tool call. Twee nieuwe fixtures:
-`git_push_without_tests` en `pr_question_answered_in_words`. Rule-teksten in
+## 32. Rule texts and benchmark adapted to deciding afterwards
+The benchmark fixtures now end where the Gateway decides: the last assistant message of a Turn, or
+an assistant message with a triggering tool call. Two new fixtures:
+`git_push_without_tests` and `pr_question_answered_in_words`. Rule texts in
 `workflows/fwd-default.yaml`:
 
-- `propose_issue`: gebroken als er code is gewijzigd zonder issue. Een afgewezen vraag om een issue
-  telt niet als verwijzing. Zonder die zin zakte `declined_proposal_still_open` naar 0,61.
-- `block_pr_without_tests`: gebroken als het laatste assistant-bericht een tool call doet die een PR
-  maakt of pusht. Een commando dat alleen in tekst wordt uitgelegd telt niet. Zonder die zin gaf
-  `pr_question_answered_in_words` 0,74.
+- `propose_issue`: broken if code was changed without an issue. A declined question about an issue
+  does not count as a reference. Without that sentence `declined_proposal_still_open` dropped to
+  0.61.
+- `block_pr_without_tests`: broken if the last assistant message makes a tool call that creates a
+  PR or pushes. A command that is only explained in text does not count. Without that sentence
+  `pr_question_answered_in_words` gave 0.74.
 
-`long_conversation_early_issue_lost` had `flag_no_spec: false`, maar er komt geen spec in voor.
-Elke Jev-run gaf 0,95 of hoger. De ground truth is nu `true`.
-Resultaat op `full` (21 fixtures, Jev, twee runs): 100% goed, gemiddeld ~0,5 s, p95 ~1 s.
+`long_conversation_early_issue_lost` had `flag_no_spec: false`, but no spec appears in it.
+Every Jev run gave 0.95 or higher. The ground truth is now `true`.
+Result on `full` (21 fixtures, Jev, two runs): 100% correct, ~0.5 s on average, p95 ~1 s.
 
-## 33. Meer dan één choice (`n > 1`): geen Decision
-Vraagt een request om meer dan één antwoord (`n > 1`), of bevat het antwoord een choice met een
-andere index dan 0, dan gaat het antwoord ongewijzigd door, zonder Decision. De Gateway leest en
-wijzigt alleen choice 0. Bij meerdere choices raakten verzameling en aanpassing door elkaar
-(Codex-review 3, #1). Opencode stuurt nooit `n > 1`, dus dit kost in de praktijk niets.
+## 33. More than one choice (`n > 1`): no Decision
+If a request asks for more than one reply (`n > 1`), or the reply contains a choice with an index
+other than 0, the reply passes through unchanged, without a Decision. The Gateway only reads and
+modifies choice 0. With multiple choices, collecting and amending the reply got mixed up
+(Codex review 3, #1). Opencode never sends `n > 1`, so in practice this costs nothing.
 
-## 34. Trigger kijkt naar de uitgepakte argumenten
-De trigger zocht in de JSON-tekst van de argumenten. `{"command":"git\u0020push"}`, een tab of
-`git -C /pad push` ontsnapten daardoor aan de Block-check. Nu pakt de Gateway de JSON uit en plakt
-alle tekstwaarden aan elkaar; is het geen JSON, dan telt de ruwe tekst. Elke reeks witruimte wordt
-één spatie. De standaard-trigger in `workflows/fwd-default.yaml` vangt ook globale git-opties:
-`\bgit\b(\s+-\S+(\s+[^\s-]\S*)?)*\s+push\b`, plus `gh pr create` en `glab mr create` met
-willekeurige witruimte.
+## 34. The trigger looks at the decoded arguments
+The trigger searched the JSON text of the arguments. `{"command":"git push"}`, a tab or
+`git -C /path push` therefore escaped the Block check. Now the Gateway decodes the JSON and joins
+all string values together; if it is not JSON, the raw text counts. Every run of whitespace becomes
+a single space. The default trigger in `workflows/fwd-default.yaml` also catches global git options:
+`\bgit\b(\s+-\S+(\s+[^\s-]\S*)?)*\s+push\b`, plus `gh pr create` and `glab mr create` with
+arbitrary whitespace.
 
-## 35. Trigger-regexes blijven simpel; de Gateway kijkt naar de eerste 8.000 tekens
-Een regex met veel backtracking kan de event loop stilzetten. De workflow is config van het team
-zelf, dus vertrouwd: de Gateway houdt Python `re` en gebruikt geen aparte regex-engine. Wel kijkt
-een trigger naar hooguit de eerste 8.000 tekens van de uitgepakte argumenten. Schrijf triggers als
-eenvoudige patronen zonder geneste herhaling die op dezelfde tekst kan passen. Zo is in de
-standaard-trigger een optiewaarde nooit iets dat met `-` begint; dan is er maar één manier om te
-matchen.
-
+## 35. Trigger regexes stay simple; the Gateway looks at the first 8,000 characters
+A regex with heavy backtracking can stall the event loop. The workflow is the team's own config, and
+therefore trusted: the Gateway sticks with Python `re` and uses no separate regex engine. However, a
+trigger looks at no more than the first 8,000 characters of the decoded arguments. Write triggers as
+simple patterns without nested repetition that can match the same text. That is why in the default
+trigger an option value is never something that starts with `-`; then there is only one way to
+match.

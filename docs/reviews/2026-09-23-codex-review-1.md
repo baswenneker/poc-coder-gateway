@@ -1,14 +1,14 @@
-# Codex-review 1 (adversarial, alleen lezen) — diff 3f6de43..563f5f6
+# Codex review 1 (adversarial, read-only) — diff 3f6de43..563f5f6
 
-Uitgevoerd via de Codex-plugin (`codex:rescue`). Geen kritieke of hoge bevindingen; 7 middelzware.
-Kolom "Opvolging" wordt bijgewerkt zodra een fix is gecommit.
+Run via the Codex plugin (`codex:rescue`). No critical or high findings; 7 medium.
+The "Follow-up" column is updated once a fix has been committed.
 
-| # | Bevinding | Plek | Opvolging |
-|---|-----------|------|-----------|
-| 1 | Tool-output wordt altijd op 2.000 tekens afgekapt, ook bij strategie `full`. Een testsamenvatting aan het eind van lange pytest-output verdwijnt, wat een onterechte Block kan geven. | transcript.py | gefixt: alleen afkappen boven 20.000 tekens, met begin én eind bewaard (DECISIONS #18) |
-| 2 | Een oudere request kan na de `await` op de Decider de state van een nieuwere Turn overschrijven (flags, proposal). | app.py | gefixt: lock per Conversation rond Decision en state-update, doorsturen buiten de lock (DECISIONS #24) |
-| 3 | Als de client de geschiedenis inkort (compaction), groeit de Turn-teller niet meer en blijven voorstellen onderdrukt. | store.py | gefixt: nieuwe Turn ook bij een ander laatste user-bericht; tekst-antwoord zonder index (DECISIONS #25) |
-| 4 | Verbreekt de client de verbinding vóór de eerste chunk, dan blijft de upstream-stream open. | upstream.py | gefixt: response-klasse sluit de upstream-stream in `finally` over de hele levensduur |
-| 5 | Een fout bij het schrijven van `var/events.jsonl` breekt de request af, ook na een fail-open Decision. | store.py / app.py | gefixt: `OSError` wordt één keer gelogd, request gaat door (DECISIONS #26) |
-| 6 | Het dashboard `/gateway/` heeft geen authenticatie en toont alle Virtual Models. | app.py | gefixt: lock per Conversation rond Decision en state-update, doorsturen buiten de lock (DECISIONS #24) |
-| 7 | Met `fallback: none` telt de benchmark een Decider-fout als correcte "niets aan de hand"-voorspelling. | benchmark.py / deciders | gefixt: `SoloDecider` zet `error` bij falen (DECISIONS #19) |
+| # | Finding | Location | Follow-up |
+|---|---------|----------|-----------|
+| 1 | Tool output is always cut at 2,000 characters, even with strategy `full`. A test summary at the end of long pytest output disappears, which can cause a wrongful Block. | transcript.py | fixed: only truncate above 20,000 characters, keeping both start and end (DECISIONS #18) |
+| 2 | An older request can, after the `await` on the Decider, overwrite the state of a newer Turn (flags, proposal). | app.py | fixed: lock per Conversation around Decision and state update, forwarding outside the lock (DECISIONS #24) |
+| 3 | If the client shortens the history (compaction), the Turn counter stops increasing and Proposals stay suppressed. | store.py | fixed: a new Turn also starts on a different last user message; text answer without an index (DECISIONS #25) |
+| 4 | If the client drops the connection before the first chunk, the upstream stream stays open. | upstream.py | fixed: the response class closes the upstream stream in `finally` over its whole lifetime |
+| 5 | An error while writing `var/events.jsonl` aborts the request, even after a fail-open Decision. | store.py / app.py | fixed: the `OSError` is logged once and the request continues (DECISIONS #26) |
+| 6 | The `/gateway/` dashboard has no authentication and shows all Virtual Models. | app.py | fixed: optional `dashboard_token`; warning at startup when bound to a non-loopback address without a token (DECISIONS #27) |
+| 7 | With `fallback: none`, the benchmark counts a Decider error as a correct "nothing wrong" prediction. | benchmark.py / deciders | fixed: `SoloDecider` sets `error` on failure (DECISIONS #19) |

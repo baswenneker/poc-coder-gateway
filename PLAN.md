@@ -1,62 +1,62 @@
-# poc-coder-gateway — werkplan
+# poc-coder-gateway — work plan
 
-Prototype. Ruw mag, moeilijk instellen mag.
+Prototype. Rough is fine, hard to configure is fine.
 
-## Wat het is
-OpenAI-compatible gateway. Per API key een virtual model (echt model + system prompt +
-workflow-definitie). Een async observer leest het transcript en toetst het tegen de
-workflow. Drie ingrepen: flag, injectie, blokkade.
+## What it is
+OpenAI-compatible gateway. One Virtual Model per API key (real model + system prompt +
+Workflow Definition). An async observer reads the transcript and checks it against the
+workflow. Three interventions: flag, injection, block.
 
-## Besluiten
-- Injectie = een tool call met vast id (`gateway_proposal`) in het assistant-antwoord.
-  De developer antwoordt ja/nee/anders. Niet blokkerend aan modelzijde.
-- Blokkeren kan, maar alleen als de workflow-definitie dat per regel zegt.
-- Gateway heeft een read-API (status, flags, openstaande voorstellen) zodat een skill
-  in de coding agent dit kan tonen.
-- Conversatie-identificatie: fingerprint op de eerste user-berichten (opencode stuurt geen session-id).
-- Upstream: OpenAI direct (OPENAI_API_KEY in .env). Verzoek is al OpenAI-formaat, dus doorgeven zonder vertaling.
-- Streaming zit in de POC. Bij block en propose produceert de gateway zelf een SSE-stream.
-- Beslissing "ingrijpen of niet" per beurt door Jev (typesafe.ai, System One model):
-  input = transcript + gestructureerde state, output = vooraf gedefinieerde enum + kans.
-  70-500ms, dus kan synchroon in het request-pad. Early access, hosted.
+## Decisions
+- Injection = a tool call with a fixed id (`gateway_proposal`) in the assistant reply.
+  The Developer answers yes/no/something else. Non-blocking on the model side.
+- Blocking is possible, but only if the Workflow Definition says so per Rule.
+- The Gateway has a read API (status, flags, open proposals) so a skill
+  in the coding agent can display it.
+- Conversation identification: fingerprint on the first user messages (opencode sends no session id).
+- Upstream: OpenAI directly (OPENAI_API_KEY in .env). The request is already in OpenAI format, so pass it through without translation.
+- Streaming is in the POC. For block and propose, the Gateway produces its own SSE stream.
+- The "intervene or not" decision per turn is made by Jev (typesafe.ai, System One model):
+  input = transcript + structured state, output = predefined enum + probability.
+  70-500ms, so it can run synchronously in the request path. Early access, hosted.
   https://typesafe.ai/blog/introducing-system-one-models-and-jev
 
-## Vereenvoudigde case (eerste bouwdoel)
-1. Injectie: geen issue genoemd in de conversatie en developer begint te coderen
-   → voorstel "zullen we eerst een issue aanmaken?" via tool call.
-2. Flag: developer past code aan zonder dat er een spec-bestand is besproken
-   → flag `no_spec` in dashboard/API, geen effect op gesprek.
-3. Blokkade: request bevat `gh pr create` (of gelijkwaardig) terwijl tests niet
-   groen zijn gemeld → gateway weigert, stuurt uitleg terug als assistant-antwoord.
+## Simplified case (first build target)
+1. Injection: no issue mentioned in the Conversation and the Developer starts coding
+   → proposal "shall we create an issue first?" via a tool call.
+2. Flag: the Developer changes code without any spec file having been discussed
+   → flag `no_spec` in the dashboard/API, no effect on the Conversation.
+3. Block: the request contains `gh pr create` (or equivalent) while tests have not been
+   reported green → the Gateway refuses and sends back an explanation as the assistant reply.
 
 ## Todo
-- [x] Benchmarkscript: strategieën voor Jev-state vergelijken op fixtures met ground truth — `uv run benchmark`, zie `benchmark/README.md`
-- [x] End-to-end test met opencode als client (provider-config, scenario voor propose/flag/block) — zie `docs/e2e-opencode.md`
-- [x] Configuratieformaat van workflow-definitie uitwerken (fases, regels, ingreep per regel) — `workflows/fwd-default.yaml`
-- [x] Techstack: Python + uv, FastAPI, streaming (SSE). Upstream OpenAI. Jev via typesafe-sdk.
-- [x] Jev toetsen (key is er): classificeert het transcript betrouwbaar naar {none, propose_issue, flag_no_spec, block_pr}? — ja/nee-vraag per regel (DECISIONS #6); benchmark ~94% bij strategie `full`
-- [x] Fallback als Jev niet beschikbaar is: klein LLM met structured output (zelfde enum) — `deciders/llm.py`, gpt-5.4-mini
-- [x] Fingerprint-functie voor conversatie-identificatie — `fingerprint.py`; opencode stuurt wel `x-session-id` (DECISIONS #1)
-- [x] Skill voor coding agent die de read-API bevraagt — `skills/gateway-status/`
+- [x] Benchmark script: compare strategies for Jev state on fixtures with ground truth — `uv run benchmark`, see `benchmark/README.md`
+- [x] End-to-end test with opencode as the client (provider config, scenario for propose/flag/block) — see `docs/e2e-opencode.md`
+- [x] Work out the configuration format of the Workflow Definition (phases, rules, intervention per Rule) — `workflows/fwd-default.yaml`
+- [x] Tech stack: Python + uv, FastAPI, streaming (SSE). Upstream OpenAI. Jev via typesafe-sdk.
+- [x] Test Jev (key is available): does it reliably classify the transcript into {none, propose_issue, flag_no_spec, block_pr}? — yes/no question per Rule (DECISIONS #6); benchmark ~94% with strategy `full`
+- [x] Fallback when Jev is unavailable: small LLM with structured output (same enum) — `deciders/llm.py`, gpt-5.4-mini
+- [x] Fingerprint function for conversation identification — `fingerprint.py`; opencode does send `x-session-id` (DECISIONS #1)
+- [x] Skill for the coding agent that queries the read API — `skills/gateway-status/`
 
-## Benchmark: wat krijgt Jev als state?
-Repeatable script (`uv run benchmark`) dat per strategie de Jev-kansen meet op een vaste set
-testtranscripten met bekende verwachte uitkomst (ground truth per regel).
+## Benchmark: what state does Jev get?
+Repeatable script (`uv run benchmark`) that measures the Jev probabilities per strategy on a fixed set
+of test transcripts with a known expected outcome (ground truth per Rule).
 
-Strategieën:
-1. hele conversatie
-2. alleen laatste 10 berichten
-3. laatste 10 berichten volledig, alles daarvoor met tool results vervangen door `<truncated>`
-4. (later) samenvatting + laatste 10
+Strategies:
+1. whole conversation
+2. only the last 10 messages
+3. last 10 messages in full, everything before that with tool results replaced by `<truncated>`
+4. (later) summary + last 10
 
-Output per strategie: accuracy per regel bij de ingestelde drempel, gemiddelde latency,
-tokens per call. Script kiest niets, het rapporteert. Wij kiezen op basis van de tabel.
+Output per strategy: accuracy per Rule at the configured threshold, average latency,
+tokens per call. The script picks nothing, it reports. We choose based on the table.
 
-Testtranscripten: handmatig geschreven fixtures in `benchmark/fixtures/*.json`, elk met
+Test transcripts: hand-written fixtures in `benchmark/fixtures/*.json`, each with
 `expected: {propose_issue: true/false, flag_no_spec: ..., block_pr_without_tests: ...}`.
 
-## End-to-end test met opencode
-opencode als coding agent, custom provider die naar onze gateway wijst (OpenAI-compatible).
-Scenario: developer begint te coderen zonder issue → propose zichtbaar als tool call;
-developer maakt PR zonder groene tests → block zichtbaar als antwoord; flag zichtbaar via
-read-API. Vastleggen in `docs/e2e-opencode.md` hoe je dit draait.
+## End-to-end test with opencode
+opencode as the coding agent, with a custom provider that points to our Gateway (OpenAI-compatible).
+Scenario: the Developer starts coding without an issue → propose visible as a tool call;
+the Developer creates a PR without green tests → block visible as a reply; flag visible via the
+read API. Document in `docs/e2e-opencode.md` how to run this.

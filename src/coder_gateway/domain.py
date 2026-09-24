@@ -31,10 +31,10 @@ class ProposalSpec:
 
     question: str
     header: str = "Gateway"
-    accept_label: str = "Ja"
-    accept_description: str = "Doe dit eerst"
-    decline_label: str = "Nee"
-    decline_description: str = "Ga door zonder"
+    accept_label: str = "Yes"
+    accept_description: str = "Do this first"
+    decline_label: str = "No"
+    decline_description: str = "Continue without"
 
 
 # A trigger looks at no more than this many characters of a tool call's arguments (DECISIONS.md #35).

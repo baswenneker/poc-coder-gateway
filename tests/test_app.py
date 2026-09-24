@@ -33,7 +33,7 @@ OTHER_KEY = "sk-gw-other"
 AUTH = {"authorization": f"Bearer {KEY}"}
 PR_CALL: ToolCallSpec = ("call_pr", "bash", json.dumps({"command": "gh pr create --fill"}))
 LS_CALL: ToolCallSpec = ("call_ls", "bash", json.dumps({"command": "ls"}))
-BLOCK_TEXT = "Geblokkeerd: eerst tests groen."
+BLOCK_TEXT = "Blocked: tests must pass first."
 STREAMS = pytest.mark.parametrize("stream", [False, True], ids=["json", "sse"])
 
 
@@ -224,7 +224,7 @@ async def test_subagent_request_passthrough_without_decision() -> None:
     # (captured live with opencode 1.18.32). The main agent talks there, not the Developer.
     decider = FakeDecider(make_decision("propose_issue", "block_pr_without_tests"))
     h = Harness(decider)
-    h.upstream.replies = [Reply("Ik maak een PR.", [PR_CALL])]
+    h.upstream.replies = [Reply("I'll open a PR.", [PR_CALL])]
     headers = {**AUTH, "x-session-id": "ses_child", "x-parent-session-id": "ses_parent"}
     r = await h.client.post(
         "/v1/chat/completions", json=agent_body(user("Zoek calc.py"), question_tool=False), headers=headers
@@ -286,12 +286,12 @@ async def test_one_decision_per_turn_none_on_intermediate_requests(stream: bool)
     decider = FakeDecider()
     h = Harness(decider)
     test_call: ToolCallSpec = ("call_2", "bash", '{"command":"pytest"}')
-    h.upstream.replies = [Reply("Eerst kijken.", [LS_CALL]), Reply("", [test_call])]
+    h.upstream.replies = [Reply("Looking first.", [LS_CALL]), Reply("", [test_call])]
     history: list[Message] = [user("voeg multiply toe")]
     first = await h.reply(agent_body(*history, stream=stream))
     assert first["tool_calls"] == [LS_CALL] and first["finish"] == ["tool_calls"]
     assert decider.inputs == []
-    history += [assistant("Eerst kijken.", LS_CALL), tool_result("call_ls", "calc.py")]
+    history += [assistant("Looking first.", LS_CALL), tool_result("call_ls", "calc.py")]
     await h.reply(agent_body(*history, stream=stream))
     assert decider.inputs == []
     history += [assistant("", test_call), tool_result("call_2", "2 passed")]
@@ -361,14 +361,14 @@ async def test_flag_set_and_cleared_at_end_of_turn_without_effect_on_reply() -> 
 @STREAMS
 async def test_proposal_tool_mode_appended_to_final_reply(stream: bool) -> None:
     h = Harness(FakeDecider(make_decision("propose_issue")))
-    h.upstream.replies = [Reply("multiply staat erin.")]
+    h.upstream.replies = [Reply("multiply is in there.")]
     reply = await h.reply(agent_body(user("add a feature"), stream=stream))
-    assert reply["content"] == "multiply staat erin."  # the model's own text is kept
+    assert reply["content"] == "multiply is in there."  # the model's own text is kept
     assert reply["finish"] == ["tool_calls"]
     [(call_id, name, args)] = reply["tool_calls"]
     assert call_id == "gateway_proposal_1" and name == "question"
     q = json.loads(args)["questions"][0]
-    assert [o["label"] for o in q["options"]] == ["Ja, maak een issue", "Nee, ga door"]
+    assert [o["label"] for o in q["options"]] == ["Yes, create an issue", "No, continue"]
     assert len(h.upstream.requests) == 1  # the model did answer
     status = (await h.client.get("/gateway/status", headers=AUTH)).json()
     assert status["open_proposals"][0]["id"] == "gateway_proposal_1"
@@ -377,11 +377,9 @@ async def test_proposal_tool_mode_appended_to_final_reply(stream: bool) -> None:
 @STREAMS
 async def test_proposal_text_mode_appended_to_final_reply(stream: bool) -> None:
     h = Harness(FakeDecider(make_decision("propose_issue")))
-    h.upstream.replies = [Reply("multiply staat erin.")]
+    h.upstream.replies = [Reply("multiply is in there.")]
     reply = await h.reply(agent_body(user("add a feature"), stream=stream, question_tool=False))
-    assert (
-        reply["content"] == "multiply staat erin.\n\nZullen we eerst een issue aanmaken? (antwoord ja of nee)"
-    )
+    assert reply["content"] == "multiply is in there.\n\nShall we create an issue first? (answer yes or no)"
     assert reply["finish"] == ["stop"] and reply["tool_calls"] == []
 
 
@@ -397,7 +395,7 @@ async def test_proposal_tool_mode_once_per_turn_then_accepted() -> None:
     history: list[Message] = [
         user("add a feature"),
         assistant("upstream", (call_id, "question", args)),
-        tool_result(call_id, answer(question, "Ja, maak een issue")),
+        tool_result(call_id, answer(question, "Yes, create an issue")),
     ]
     second = await h.reply(agent_body(*history))
     assert second["content"] == "upstream" and second["tool_calls"] == []
@@ -419,7 +417,7 @@ async def test_declined_proposal_returns_next_turn() -> None:
     history: list[Message] = [
         user("add a feature"),
         assistant("upstream", (call_id, "question", args)),
-        tool_result(call_id, answer("q", "Nee, ga door")),
+        tool_result(call_id, answer("q", "No, continue")),
     ]
     again = await h.reply(agent_body(*history))
     assert again["tool_calls"] == []
@@ -434,7 +432,7 @@ async def test_proposal_text_mode_answer_in_next_turn() -> None:
     h = Harness(FakeDecider(make_decision("propose_issue")))
     first = await h.reply(agent_body(user("add a feature"), question_tool=False, stream=True))
     text = first["content"]
-    assert text.endswith("(antwoord ja of nee)")
+    assert text.endswith("(answer yes or no)")
     history = [user("add a feature"), assistant(text), user("nee")]
     reply = await h.reply(agent_body(*history, question_tool=False))
     assert reply["content"] == "upstream"  # declined in Turn 2: not asked again in Turn 2
@@ -442,7 +440,7 @@ async def test_proposal_text_mode_answer_in_next_turn() -> None:
     assert conv.proposals[0].status == "declined" and conv.proposals[0].answer == "nee"
     history += [assistant("upstream"), user("go on")]
     reply = await h.reply(agent_body(*history, question_tool=False))
-    assert reply["content"].endswith("(antwoord ja of nee)")
+    assert reply["content"].endswith("(answer yes or no)")
 
 
 async def test_text_proposal_answered_after_history_compaction() -> None:
@@ -451,7 +449,7 @@ async def test_text_proposal_answered_after_history_compaction() -> None:
     h = Harness(FakeDecider(make_decision("propose_issue")))
     history: list[Message] = [user("a"), assistant("x"), user("b"), assistant("y"), user("c")]
     text = (await h.reply(agent_body(*history, question_tool=False)))["content"]
-    assert text.endswith("(antwoord ja of nee)")
+    assert text.endswith("(answer yes or no)")
     compacted = [user("summary of a, b and c"), assistant(text), user("nee")]
     assert (await h.reply(agent_body(*compacted, question_tool=False)))["content"] == "upstream"
     conv = h.conv()
@@ -459,7 +457,7 @@ async def test_text_proposal_answered_after_history_compaction() -> None:
     assert conv.proposals[0].status == "declined" and conv.proposals[0].answer == "nee"
     compacted += [assistant("upstream"), user("go on")]
     reply = await h.reply(agent_body(*compacted, question_tool=False))
-    assert reply["content"].endswith("(antwoord ja of nee)")
+    assert reply["content"].endswith("(answer yes or no)")
     assert conv.turn == 5
 
 
@@ -519,7 +517,7 @@ async def test_after_block_next_turn_runs_normally() -> None:
     h.upstream.replies = [Reply("", [PR_CALL])]
     blocked = await h.reply(agent_body(user("open a PR")))
     assert blocked["content"] == BLOCK_TEXT
-    reply = await h.reply(agent_body(user("open a PR"), assistant(BLOCK_TEXT), user("draai de tests")))
+    reply = await h.reply(agent_body(user("open a PR"), assistant(BLOCK_TEXT), user("run the tests")))
     assert reply["content"] == "upstream" and reply["finish"] == ["stop"]
 
 

@@ -1,7 +1,7 @@
 # Benchmark fixtures
 
 Fixtures for `uv run benchmark` (see `src/coder_gateway/benchmark.py` and the
-"Benchmark: wat krijgt Jev als state?" section of `PLAN.md`).
+"Benchmark: what state does Jev get?" section of `PLAN.md`).
 
 ## Format
 

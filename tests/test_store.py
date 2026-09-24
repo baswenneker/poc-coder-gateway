@@ -13,20 +13,19 @@ from coder_gateway.store import (
     parse_tool_answer,
 )
 
-SPEC = ProposalSpec(question="q?", accept_label="Ja, maak een issue", decline_label="Nee, ga door")
+SPEC = ProposalSpec(question="q?", accept_label="Yes, create an issue", decline_label="No, continue")
 
 
 def test_parse_tool_answer() -> None:
-    assert parse_tool_answer('User answered: "q?"="Ja, maak een issue"', SPEC) is ProposalStatus.ACCEPTED
-    assert parse_tool_answer('["nee, GA DOOR"]', SPEC) is ProposalStatus.DECLINED
+    assert parse_tool_answer('User answered: "q?"="Yes, create an issue"', SPEC) is ProposalStatus.ACCEPTED
+    assert parse_tool_answer('["no, CONTINUE"]', SPEC) is ProposalStatus.DECLINED
     assert parse_tool_answer("The user dismissed this question", SPEC) is ProposalStatus.DECLINED
-    assert parse_tool_answer('"q?"="eerst de spec"', SPEC) is ProposalStatus.ANSWERED
+    assert parse_tool_answer('"q?"="spec first"', SPEC) is ProposalStatus.ANSWERED
 
 
 # Real tool results from opencode 1.18.32 (captured live via `opencode serve`, docs/e2e-opencode.md).
 _REAL_Q = (
-    "Er is nog geen issue genoemd voor dit werk. Zullen we eerst een issue aanmaken, "
-    "zodat het werk traceerbaar is?"
+    "No issue has been mentioned for this work yet. Shall we create an issue first, so the work is traceable?"
 )
 
 
@@ -38,11 +37,11 @@ def _opencode_answer(value: str, question: str = _REAL_Q) -> str:
 
 
 def test_parse_tool_answer_real_opencode_format() -> None:
-    assert parse_tool_answer(_opencode_answer("Ja, maak een issue"), SPEC) is ProposalStatus.ACCEPTED
-    assert parse_tool_answer(_opencode_answer("Nee, ga door"), SPEC) is ProposalStatus.DECLINED
-    assert parse_tool_answer(_opencode_answer("Eerst de spec schrijven"), SPEC) is ProposalStatus.ANSWERED
+    assert parse_tool_answer(_opencode_answer("Yes, create an issue"), SPEC) is ProposalStatus.ACCEPTED
+    assert parse_tool_answer(_opencode_answer("No, continue"), SPEC) is ProposalStatus.DECLINED
+    assert parse_tool_answer(_opencode_answer("Write the spec first"), SPEC) is ProposalStatus.ANSWERED
     # Multi-select: both labels in one value.
-    both = _opencode_answer("Ja, maak een issue, Nee, ga door")
+    both = _opencode_answer("Yes, create an issue, No, continue")
     assert parse_tool_answer(both, SPEC) is ProposalStatus.ANSWERED
     assert parse_tool_answer("The user dismissed this question", SPEC) is ProposalStatus.DECLINED
 
@@ -50,25 +49,25 @@ def test_parse_tool_answer_real_opencode_format() -> None:
 def test_parse_tool_answer_requires_exact_match_in_known_format() -> None:
     # A free-form value that merely contains the accept label must not count as accepted, or the
     # Proposal is suppressed for good (codex-review-2, finding 1).
-    answer = _opencode_answer("Niet Ja, maak een issue; eerst de spec")
+    answer = _opencode_answer("Not Yes, create an issue; spec first")
     assert parse_tool_answer(answer, SPEC) is ProposalStatus.ANSWERED
 
 
 def test_parse_tool_answer_ignores_labels_in_question_text() -> None:
-    question = "Nee, ga door is ook goed. Zullen we eerst een issue aanmaken?"
-    answer = _opencode_answer("Ja, maak een issue", question=question)
+    question = "No, continue is fine too. Shall we create an issue first?"
+    answer = _opencode_answer("Yes, create an issue", question=question)
     assert parse_tool_answer(answer, SPEC) is ProposalStatus.ACCEPTED
 
 
 def test_parse_text_answer() -> None:
-    for text in ("ja", "Yes please", "ok.", "y", "Ja, maak een issue"):
+    for text in ("ja", "Yes please", "ok.", "y", "Yes, create an issue"):
         assert parse_text_answer(text, SPEC) is ProposalStatus.ACCEPTED, text
-    # `opencode run "nee, ga maar door"` sends the message wrapped in double quotes.
-    for text in ('"ja"', '"Ja, maak een issue"'):
+    # `opencode run "no, just continue"` sends the message wrapped in double quotes.
+    for text in ('"ja"', '"Yes, create an issue"'):
         assert parse_text_answer(text, SPEC) is ProposalStatus.ACCEPTED, text
-    for text in ("nee", "No thanks", "n", "nee, ga door", '"nee, ga maar door"'):
+    for text in ("nee", "No thanks", "n", "no, continue", '"no, just continue"'):
         assert parse_text_answer(text, SPEC) is ProposalStatus.DECLINED, text
-    for text in ("yesterday it broke", "niet nu, eerst lunch", ""):
+    for text in ("yesterday it broke", "not now, lunch first", ""):
         assert parse_text_answer(text, SPEC) is ProposalStatus.ANSWERED, text
 
 
@@ -137,7 +136,7 @@ def test_tool_answer_declined_returns_next_turn() -> None:
     msgs: list[Message] = [
         {"role": "user", "content": "fix it"},
         {"role": "assistant", "tool_calls": [{"id": p.id, "type": "function"}]},
-        {"role": "tool", "tool_call_id": p.id, "content": '"q"="Nee, ga door"'},
+        {"role": "tool", "tool_call_id": p.id, "content": '"q"="No, continue"'},
     ]
     store.apply_answers(conv, msgs, wf)
     assert p.status is ProposalStatus.DECLINED
@@ -154,7 +153,7 @@ def test_accepted_never_again() -> None:
     conv = store.get_or_create("vm", "c")
     store.begin_request(conv, 1)
     p = store.add_proposal(conv, "propose_issue", ProposalMode.TOOL, [])
-    store.apply_answers(conv, [{"role": "tool", "tool_call_id": p.id, "content": "Ja, maak een issue"}], wf)
+    store.apply_answers(conv, [{"role": "tool", "tool_call_id": p.id, "content": "Yes, create an issue"}], wf)
     assert p.status is ProposalStatus.ACCEPTED
     store.begin_request(conv, 5)
     assert not store.can_propose(conv, "propose_issue")

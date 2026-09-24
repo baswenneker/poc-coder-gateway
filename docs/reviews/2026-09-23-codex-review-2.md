@@ -1,12 +1,12 @@
-# Codex-review 2 (adversarial, alleen lezen) — diff 563f5f6..c10d29d
+# Codex review 2 (adversarial, read-only) — diff 563f5f6..c10d29d
 
-Uitgevoerd met `codex exec --sandbox read-only` (de eerste poging via de plugin liep in een timeout).
-Codex vond geen deadlock, geen lock die tijdens het streamen vastgehouden wordt en geen dubbele close.
-Herhaalde requests binnen één Turn houden dezelfde Turn. 3 middelzware punten, 1 laag.
+Run with `codex exec --sandbox read-only` (the first attempt via the plugin timed out).
+Codex found no deadlock, no lock held during streaming and no double close.
+Repeated requests within one Turn keep the same Turn. 3 medium issues, 1 low.
 
-| # | Bevinding | Plek | Opvolging |
-|---|-----------|------|-----------|
-| 1 | Een vrij antwoord dat het accept-label bevat ("Niet Ja, maak een issue; eerst de spec") telt als `accepted`. Daarna komt het voorstel nooit meer terug. | store.py | opgelost: `parse_tool_answer` vereist bij het bekende opencode-formaat nu een exacte match met het accept- of decline-label; alles anders is `answered` |
-| 2 | `setup-demo.sh` zet een andere URL of key wel in `opencode.json`, maar het skill-script gebruikt nog de standaardwaarden. | scripts/setup-demo.sh | opgelost: `gateway-status.sh` leest zonder env-vars de `gw`-provider uit de dichtstbijzijnde `opencode.json` |
-| 3 | Kan de map van `var/events.jsonl` niet worden aangemaakt, dan start de Gateway niet. | store.py | opgelost: `ConversationStore.__init__` vangt de `OSError` af (zelfde beleid als #26), logt en draait verder zonder events-bestand |
-| 4 | Per Conversation blijft een lock in het geheugen staan, zonder opruimen. | app.py | geaccepteerd voor de POC: de store zelf ruimt ook niets op; een demo heeft tientallen Conversations |
+| # | Finding | Location | Follow-up |
+|---|---------|----------|-----------|
+| 1 | A free-form answer that contains the accept label ("Not Yes, create an issue; spec first") counts as `accepted`. After that the Proposal never comes back. | store.py | resolved: for the known opencode format, `parse_tool_answer` now requires an exact match with the accept or decline label; anything else is `answered` |
+| 2 | `setup-demo.sh` does write a different URL or key to `opencode.json`, but the skill script still uses the defaults. | scripts/setup-demo.sh | resolved: without env vars, `gateway-status.sh` reads the `gw` provider from the nearest `opencode.json` |
+| 3 | If the directory of `var/events.jsonl` cannot be created, the Gateway does not start. | store.py | resolved: `ConversationStore.__init__` catches the `OSError` (same policy as #26), logs and keeps running without an events file |
+| 4 | A lock per Conversation stays in memory, never cleaned up. | app.py | accepted for the POC: the store itself does not clean anything up either; a demo has dozens of Conversations |

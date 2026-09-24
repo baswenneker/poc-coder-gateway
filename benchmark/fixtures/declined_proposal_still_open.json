@@ -57,7 +57,7 @@
           "type": "function",
           "function": {
             "name": "question",
-            "arguments": "{\"questions\": [{\"question\": \"Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?\", \"header\": \"Issue aanmaken?\", \"options\": [{\"label\": \"Ja, maak een issue\", \"description\": \"Maak een issue aan voor dit werk\"}, {\"label\": \"Nee, niet nodig\", \"description\": \"Geen issue voor dit werk\"}]}]}"
+            "arguments": "{\"questions\": [{\"question\": \"No issue has been mentioned for this work. Shall we create one so it is traceable?\", \"header\": \"Create issue?\", \"options\": [{\"label\": \"Yes, create an issue\", \"description\": \"Create an issue for this work\"}, {\"label\": \"No, not needed\", \"description\": \"No issue for this work\"}]}]}"
           }
         }
       ]
@@ -65,7 +65,7 @@
     {
       "role": "tool",
       "tool_call_id": "gateway_proposal_1",
-      "content": "User has answered your questions: \"Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?\"=\"Nee, niet nodig\". You can now continue with the user's answers in mind."
+      "content": "User has answered your questions: \"No issue has been mentioned for this work. Shall we create one so it is traceable?\"=\"No, not needed\". You can now continue with the user's answers in mind."
     },
     {
       "role": "assistant",

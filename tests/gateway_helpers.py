@@ -20,10 +20,10 @@ WORKFLOW_DATA = {
             "broken_when": "no issue",
             "intervention": "propose",
             "proposal": {
-                "question": "Zullen we eerst een issue aanmaken?",
-                "header": "Eerst een issue?",
-                "accept_label": "Ja, maak een issue",
-                "decline_label": "Nee, ga door",
+                "question": "Shall we create an issue first?",
+                "header": "Issue first?",
+                "accept_label": "Yes, create an issue",
+                "decline_label": "No, continue",
             },
         },
         {
@@ -37,7 +37,7 @@ WORKFLOW_DATA = {
             "description": "Green tests before PR.",
             "broken_when": "pr without tests",
             "intervention": "block",
-            "block_message": "Geblokkeerd: eerst tests groen.",
+            "block_message": "Blocked: tests must pass first.",
             "trigger": {"pattern": "gh pr create|git push"},
         },
     ],

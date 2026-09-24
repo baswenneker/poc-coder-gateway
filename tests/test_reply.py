@@ -26,7 +26,7 @@ from coder_gateway.reply import (
     reply_from_completion,
 )
 
-SPEC = ProposalSpec(question="Een issue?", header="Issue", accept_label="Ja", decline_label="Nee")
+SPEC = ProposalSpec(question="An issue?", header="Issue", accept_label="Yes", decline_label="No")
 PR_CALL = ("call_1", "bash", json.dumps({"command": "gh pr create --fill"}))
 
 
@@ -48,7 +48,7 @@ async def _run(data: bytes, amendment: Amendment | None) -> tuple[bytes, list[As
 
 
 async def test_stream_without_amendment_is_unchanged() -> None:
-    for data in (upstream_sse("Klaar."), upstream_sse("Ik maak een PR.", [PR_CALL])):
+    for data in (upstream_sse("Done."), upstream_sse("I'll open a PR.", [PR_CALL])):
         out, seen = await _run(data, None)
         assert out == data
         assert len(seen) == 1
@@ -56,15 +56,15 @@ async def test_stream_without_amendment_is_unchanged() -> None:
 
 async def test_stream_collects_the_reply() -> None:
     calls = [PR_CALL, ("call_2", "read", '{"filePath": "a.py"}')]
-    _, seen = await _run(upstream_sse("Eerst lezen.", calls), None)
+    _, seen = await _run(upstream_sse("Reading first.", calls), None)
     reply = seen[0]
-    assert reply.content == "Eerst lezen." and reply.finish_reason == "tool_calls"
+    assert reply.content == "Reading first." and reply.finish_reason == "tool_calls"
     assert [(tc.id, tc.name, tc.arguments) for tc in reply.tool_calls] == calls
     assert reply.as_message()["tool_calls"][0]["function"]["name"] == "bash"
 
 
 async def test_text_streams_live_before_tool_calls_are_complete() -> None:
-    data = upstream_sse("Ik maak een PR.", [PR_CALL])
+    data = upstream_sse("I'll open a PR.", [PR_CALL])
     events = [e + b"\n\n" for e in data.split(b"\n\n") if e]
     pulled: list[int] = []
 
@@ -85,36 +85,36 @@ async def test_text_streams_live_before_tool_calls_are_complete() -> None:
 
 async def test_stream_proposal_tool_call_appended() -> None:
     amendment = proposal_tool_amendment(SPEC, "gateway_proposal_1")
-    out, _ = await _run(upstream_sse("Klaar: multiply toegevoegd."), amendment)
+    out, _ = await _run(upstream_sse("Done: added multiply."), amendment)
     parsed = parse_with_openai_sdk(out, stream=True)
-    assert parsed["content"] == "Klaar: multiply toegevoegd."
+    assert parsed["content"] == "Done: added multiply."
     assert parsed["finish"] == ["tool_calls"]
     [(call_id, name, args)] = parsed["tool_calls"]
     assert call_id == "gateway_proposal_1" and name == "question"
     q = json.loads(args)["questions"][0]
-    assert q["question"] == "Een issue?" and [o["label"] for o in q["options"]] == ["Ja", "Nee"]
+    assert q["question"] == "An issue?" and [o["label"] for o in q["options"]] == ["Yes", "No"]
     assert parsed["usage"] == 15 and out.endswith(b"data: [DONE]\n\n")
 
 
 async def test_stream_proposal_text_appended() -> None:
-    out, _ = await _run(upstream_sse("Klaar."), proposal_text_amendment(SPEC, "Klaar."))
+    out, _ = await _run(upstream_sse("Done."), proposal_text_amendment(SPEC, "Done."))
     parsed = parse_with_openai_sdk(out, stream=True)
-    assert parsed["content"] == f"Klaar.\n\nEen issue? {TEXT_MODE_SUFFIX}"
+    assert parsed["content"] == f"Done.\n\nAn issue? {TEXT_MODE_SUFFIX}"
     assert parsed["finish"] == ["stop"] and parsed["tool_calls"] == []
 
 
 async def test_stream_block_replaces_tool_call() -> None:
     rule = make_workflow().rule("block_pr_without_tests")
-    out, _ = await _run(upstream_sse("Ik maak een PR.", [PR_CALL]), block_amendment(rule, "Ik maak een PR."))
+    out, _ = await _run(upstream_sse("I'll open a PR.", [PR_CALL]), block_amendment(rule, "I'll open a PR."))
     parsed = parse_with_openai_sdk(out, stream=True)
     assert parsed["tool_calls"] == []
-    assert parsed["content"] == "Ik maak een PR.\n\nGeblokkeerd: eerst tests groen."
+    assert parsed["content"] == "I'll open a PR.\n\nBlocked: tests must pass first."
     assert parsed["finish"] == ["stop"]
     assert b"gh pr create" not in out
 
 
 async def test_stream_on_finish_error_fails_open() -> None:
-    data = upstream_sse("Ik maak een PR.", [PR_CALL])
+    data = upstream_sse("I'll open a PR.", [PR_CALL])
 
     async def on_finish(reply: AssistantReply) -> Amendment | None:
         raise RuntimeError("boom")
@@ -131,26 +131,26 @@ async def test_stream_without_finish_skips_on_finish() -> None:
 
 
 def test_json_reply_and_amendments() -> None:
-    data = upstream_json("Ik maak een PR.", [PR_CALL])
+    data = upstream_json("I'll open a PR.", [PR_CALL])
     reply = reply_from_completion(data)
     assert reply is not None and reply.finish_reason == "tool_calls" and reply.tool_calls[0].name == "bash"
     rule = make_workflow().rule("block_pr_without_tests")
     blocked = amend_completion(data, block_amendment(rule, reply.content))
     parsed = parse_with_openai_sdk(json.dumps(blocked).encode(), stream=False)
     assert parsed == {
-        "content": "Ik maak een PR.\n\nGeblokkeerd: eerst tests groen.",
+        "content": "I'll open a PR.\n\nBlocked: tests must pass first.",
         "tool_calls": [],
         "finish": ["stop"],
     }
 
-    proposed = amend_completion(upstream_json("Klaar."), proposal_tool_amendment(SPEC, "gateway_proposal_3"))
+    proposed = amend_completion(upstream_json("Done."), proposal_tool_amendment(SPEC, "gateway_proposal_3"))
     parsed = parse_with_openai_sdk(json.dumps(proposed).encode(), stream=False)
-    assert parsed["content"] == "Klaar." and parsed["finish"] == ["tool_calls"]
+    assert parsed["content"] == "Done." and parsed["finish"] == ["tool_calls"]
     assert parsed["tool_calls"][0][:2] == ("gateway_proposal_3", "question")
 
 
 def test_text_amendment_without_model_text_has_no_leading_blank_line() -> None:
-    assert proposal_text_amendment(SPEC, "").append_text == f"Een issue? {TEXT_MODE_SUFFIX}"
+    assert proposal_text_amendment(SPEC, "").append_text == f"An issue? {TEXT_MODE_SUFFIX}"
     assert proposal_text_amendment(SPEC, "x").append_text.startswith("\n\n")
 
 
@@ -184,18 +184,18 @@ def test_json_with_more_than_one_choice_has_no_reply() -> None:
 
 
 async def test_stream_text_in_finish_chunk_comes_before_the_amendment() -> None:
-    data = upstream_sse("Klaar").replace(
+    data = upstream_sse("Done").replace(
         b'"delta": {}, "finish_reason": "stop"', b'"delta": {"content": "."}, "finish_reason": "stop"'
     )
-    out, seen = await _run(data, proposal_text_amendment(SPEC, "Klaar."))
-    assert seen[0].content == "Klaar."
+    out, seen = await _run(data, proposal_text_amendment(SPEC, "Done."))
+    assert seen[0].content == "Done."
     parsed = parse_with_openai_sdk(out, stream=True)
-    assert parsed["content"] == f"Klaar.\n\nEen issue? {TEXT_MODE_SUFFIX}"
+    assert parsed["content"] == f"Done.\n\nAn issue? {TEXT_MODE_SUFFIX}"
     assert parsed["finish"] == ["stop"] and parsed["usage"] == 15
 
 
 async def test_stream_upstream_error_flushes_held_events_and_propagates() -> None:
-    data = upstream_sse("Ik maak een PR.", [PR_CALL])
+    data = upstream_sse("I'll open a PR.", [PR_CALL])
     cut = data.split(b"data: [DONE]")[0] + b"data: [DO"
     seen: list[AssistantReply] = []
 
@@ -217,12 +217,12 @@ async def test_stream_upstream_error_flushes_held_events_and_propagates() -> Non
 
 async def test_stream_error_event_after_finish_gets_no_decision() -> None:
     error = b'data: {"error": {"message": "overloaded"}}\n\n'
-    data = upstream_sse("Klaar.").replace(b"data: [DONE]", error + b"data: [DONE]")
-    out, seen = await _run(data, proposal_text_amendment(SPEC, "Klaar."))
+    data = upstream_sse("Done.").replace(b"data: [DONE]", error + b"data: [DONE]")
+    out, seen = await _run(data, proposal_text_amendment(SPEC, "Done."))
     assert out == data and seen == []
 
 
 async def test_stream_trailing_whitespace_is_kept() -> None:
-    data = upstream_sse("Klaar.") + b"\n"
+    data = upstream_sse("Done.") + b"\n"
     out, _ = await _run(data, None)
     assert out == data

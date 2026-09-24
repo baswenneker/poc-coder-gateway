@@ -14,7 +14,7 @@ from coder_gateway.domain import ProposalSpec, Rule
 from coder_gateway.reply import Amendment, ToolCall
 
 QUESTION_TOOL = "question"
-TEXT_MODE_SUFFIX = "(antwoord ja of nee)"
+TEXT_MODE_SUFFIX = "(answer yes or no)"
 
 
 def _separator(model_text: str) -> str:

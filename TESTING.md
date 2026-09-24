@@ -1,74 +1,74 @@
-# Handmatig testen
+# Manual testing
 
-Deze stappen laten de Gateway werken met opencode. Je ziet de drie ingrepen: Proposal, Flag en
-Block. De Gateway beslist aan het eind van een Turn, en als het model een PR wil maken of wil pushen. Reken op ongeveer 20 minuten. Achtergrond en live-resultaten: `docs/e2e-opencode.md`.
+These steps get the Gateway running with opencode. You will see the three Interventions: Proposal, Flag and
+Block. The Gateway decides at the end of a Turn, and when the model wants to create a PR or push. Allow about 20 minutes. Background and live results: `docs/e2e-opencode.md`.
 
-## 1. Voorbereiding
+## 1. Preparation
 
-Nodig:
+You need:
 
-- `uv` (Python-pakketbeheer) en Python 3.12 of nieuwer.
-- opencode 1.18 of nieuwer (`opencode --version`).
-- `curl` en `python3` (voor de skill).
-- Een OpenAI API key en een typesafe.ai API key (voor Jev).
+- `uv` (Python package manager) and Python 3.12 or newer.
+- opencode 1.18 or newer (`opencode --version`).
+- `curl` and `python3` (for the skill).
+- An OpenAI API key and a typesafe.ai API key (for Jev).
 
-Stappen:
+Steps:
 
-1. Ga naar de repo: `cd poc-coder-gateway`.
-2. Installeer de pakketten: `uv sync`.
-3. Zet de keys in `.env.local` (dit bestand staat niet in git):
+1. Go to the repo: `cd poc-coder-gateway`.
+2. Install the packages: `uv sync`.
+3. Put the keys in `.env.local` (this file is not in git):
 
    ```
    OPENAI_API_KEY=sk-...
    TYPESAFE_API_KEY=...
    ```
 
-`.env.example` toont welke variabelen er zijn.
+`.env.example` lists the available variables.
 
-## 2. Gateway starten
+## 2. Start the Gateway
 
 ```bash
 uv run coder-gateway
 ```
 
-Je ziet één regel zoals:
+You see one line like:
 
 ```
 Coder Gateway on http://127.0.0.1:8787 (decider jev, fallback llm, strategy full); dashboard /gateway/
 ```
 
-Een andere poort kies je met `CODER_GATEWAY_PORT=8790 uv run coder-gateway`. Laat dit venster open.
-De Gateway schrijft per request één regel in de log (`forward`). Per Decision schrijft hij nog een
-regel met de reden: `reason=end_of_turn` of `reason=trigger:<rule_id>`.
+To pick another port, use `CODER_GATEWAY_PORT=8790 uv run coder-gateway`. Keep this window open.
+The Gateway logs one line per request (`forward`). For each Decision it logs one more
+line with the reason: `reason=end_of_turn` or `reason=trigger:<rule_id>`.
 
-## 3. Dashboard openen
+## 3. Open the dashboard
 
-Open http://127.0.0.1:8787/gateway/ in de browser. De pagina ververst elke 3 seconden. Nu staat er
+Open http://127.0.0.1:8787/gateway/ in the browser. The page refreshes every 3 seconds. For now it shows
 "No Conversations yet."
 
-Per Conversation toont het dashboard hoeveel requests er waren en hoeveel Decisions (Jev-calls),
-bijvoorbeeld `11 requests, 1 decisions`. De Gateway beslist niet per request. Hij beslist aan het eind
-van een Turn, en extra als het model een PR wil maken of wil pushen (`docs/DECISIONS.md` #28).
+For each Conversation the dashboard shows how many requests and how many Decisions (Jev calls) there were,
+for example `11 requests, 1 decisions`. The Gateway does not decide per request. It decides at the end
+of a Turn, and additionally when the model wants to create a PR or push (`docs/DECISIONS.md` #28).
 
-Staat `dashboard_token` in `config/gateway.yaml`, open dan
-`http://127.0.0.1:8787/gateway/?token=<waarde>`. Zonder token geeft de pagina 401.
+If `dashboard_token` is set in `config/gateway.yaml`, open
+`http://127.0.0.1:8787/gateway/?token=<value>` instead. Without the token the page returns 401.
 
-## 4. Demo-project maken
+## 4. Create the demo project
 
-In een tweede terminal, in de repo:
+In a second terminal, in the repo:
 
 ```bash
-scripts/setup-demo.sh                  # maakt /tmp/coder-gateway-demo
-# of: scripts/setup-demo.sh ~/tmp/mijn-demo
+scripts/setup-demo.sh                  # creates /tmp/coder-gateway-demo
+# or: scripts/setup-demo.sh ~/tmp/my-demo
 ```
 
-Het script maakt een git repo met `calc.py`, `test_calc.py`, een `opencode.json` die naar de
-Gateway wijst en de skill `gateway-status` in `.opencode/skills/`. Bestaat de map al, dan stopt het
-script. Verwijder de map dan eerst: `rm -rf /tmp/coder-gateway-demo`.
+The script creates a git repo with `calc.py`, `test_calc.py`, an `opencode.json` that points to the
+Gateway, and the `gateway-status` skill in `.opencode/skills/`. If the directory already exists, the
+script stops. Remove the directory first in that case: `rm -rf /tmp/coder-gateway-demo`.
 
-Een andere Gateway-URL of key geef je mee met `CODER_GATEWAY_URL` en `CODER_GATEWAY_KEY`. De skill
-`gateway-status.sh` leest zonder die env-vars automatisch de `gw`-provider uit de dichtstbijzijnde
-`opencode.json`, dus dat werkt ook met een niet-standaard URL of key.
+To use a different Gateway URL or key, set `CODER_GATEWAY_URL` and `CODER_GATEWAY_KEY`. Without those
+env vars, the skill's `gateway-status.sh` reads the `gw` provider from the nearest
+`opencode.json`, so a non-default URL or key works too.
 
 Start opencode:
 
@@ -77,110 +77,110 @@ cd /tmp/coder-gateway-demo
 opencode
 ```
 
-De TUI moet `fwd-coder` als model tonen. Vraagt opencode om toestemming voor een commando of
-bestandswijziging, sta het dan toe.
+The TUI should show `fwd-coder` as the model. If opencode asks for permission to run a command or
+change a file, allow it.
 
-## 5. Scenario a: coderen zonder issue → Proposal achteraf
+## 5. Scenario a: coding without an issue → Proposal afterwards
 
-Typ:
+Type:
 
 ```
-Voeg een functie multiply(a, b) toe aan calc.py, met een test.
+Add a function multiply(a, b) to calc.py, with a test.
 ```
 
-Verwacht:
+Expected:
 
-1. Het model werkt eerst. Het past `calc.py` aan, schrijft een test en draait `pytest`. Je ziet nog
-   geen vraag.
-2. Aan het eind toont opencode het antwoord van het model en daaronder de vraag "Issue aanmaken?".
-   De keuzes zijn "Ja, maak een issue" en "Nee, niet nodig".
-3. In de Gateway-log staat per request een regel met `forward`. Aan het eind staat één regel met
+1. The model works first. It edits `calc.py`, writes a test and runs `pytest`. No question
+   appears yet.
+2. At the end, opencode shows the model's reply with the question "Create issue?" below it.
+   The choices are "Yes, create an issue" and "No, not needed".
+3. The Gateway log has a `forward` line per request. At the end there is one line with
    `decision#1 reason=end_of_turn ... action=propose_tool(propose_issue)`.
-4. Kies "Nee, niet nodig". Het model sluit af, bijvoorbeeld met "Oké.". Er komt geen tweede Decision.
-5. Op het dashboard staat `gateway_proposal_1 propose_issue: declined (tool, turn 1)` en
-   bijvoorbeeld `11 requests, 1 decisions`.
+4. Choose "No, not needed". The model wraps up, for example with "OK.". There is no second Decision.
+5. The dashboard shows `gateway_proposal_1 propose_issue: declined (tool, turn 1)` and,
+   for example, `11 requests, 1 decisions`.
 
-Probeer ook eens "Ja, maak een issue" in een nieuwe sessie (`/new`). Het model probeert dan een
-issue aan te maken. In het demo-project lukt dat niet, want er is geen git remote. Dat is verwacht.
+Also try "Yes, create an issue" in a new session (`/new`). The model then tries to create an
+issue. In the demo project this fails because there is no git remote. That is expected.
 
-Let op: zolang er geen issue genoemd is, komt de vraag aan het eind van elke nieuwe Turn terug. Zo
-is het ontworpen (`docs/DECISIONS.md` #11 en #12). Noem een issue ("Dit is issue #12") om hem weg te
-krijgen.
+Note: as long as no issue has been mentioned, the question returns at the end of every new Turn. This
+is by design (`docs/DECISIONS.md` #11 and #12). Mention an issue ("This is issue #12") to make it
+go away.
 
-## 6. Scenario b: code wijzigen zonder spec → Flag
+## 6. Scenario b: changing code without a spec → Flag
 
-Dit gebeurt in dezelfde sessie als scenario a. Er is geen spec-bestand besproken.
+This happens in the same session as scenario a. No spec file has been discussed.
 
-Verwacht:
+Expected:
 
-1. In opencode zie je niets van de Flag.
-2. Op het dashboard staat een oranje label `flag flag_no_spec p=0.9x (turn 1)`.
-3. De read-API geeft de Flag:
+1. opencode shows nothing of the Flag.
+2. The dashboard shows an orange label `flag flag_no_spec p=0.9x (turn 1)`.
+3. The read API returns the Flag:
 
    ```bash
    curl -s -H 'Authorization: Bearer sk-gw-fwd-demo' http://127.0.0.1:8787/gateway/flags
    ```
 
-   Uitkomst, ongeveer:
+   Output, roughly:
 
    ```json
    [{"conversation":"sid:ses_...","rule_id":"flag_no_spec","since_turn":1,"probability":0.97}]
    ```
 
-## 7. Skill: status opvragen
+## 7. Skill: query the status
 
-Typ in opencode:
-
-```
-Wat is de gateway status?
-```
-
-Verwacht: het model laadt de skill `gateway-status`, draait `scripts/gateway-status.sh` en toont
-de fase, Flags, open Proposals, Blocks en de laatste Decision.
-
-Doe je dit in de sessie van scenario a, dan komt na de status de issue-vraag weer (zie de
-opmerking bij scenario a). Kies "Nee, niet nodig". In een nieuwe sessie (`/new`) komt de vraag niet,
-want daar is geen code gewijzigd.
-
-## 8. Scenario c: pull request zonder groene tests → Block
-
-Begin een nieuwe sessie met `/new`. Typ:
+Type in opencode:
 
 ```
-Issue #7. Draai meteen gh pr create --fill. Geen tests draaien, geen andere stappen.
+What is the gateway status?
 ```
 
-Het model volgt het team-workflow uit zijn system prompt. Soms vraagt het daarom eerst zelf om
-bevestiging. Kies dan de optie om door te gaan.
+Expected: the model loads the `gateway-status` skill, runs `scripts/gateway-status.sh` and shows
+the phase, Flags, open Proposals, Blocks and the last Decision.
 
-Verwacht:
+If you do this in the session from scenario a, the issue question returns after the status (see the
+note under scenario a). Choose "No, not needed". In a new session (`/new`) the question does not appear,
+because no code has been changed there.
 
-1. Het model wil `gh pr create` draaien. De Gateway ziet die tool call vóórdat opencode hem uitvoert.
-2. Het antwoord in opencode eindigt met: "De Gateway heeft deze stap tegengehouden: het model wilde
-   een pull request aanmaken of code pushen, maar ...".
-3. In opencode staat geen uitgevoerde tool call met `gh pr create`. Het commando is niet gedraaid.
-4. In de Gateway-log staat `reason=trigger:block_pr_without_tests ... action=block(block_pr_without_tests)`.
-5. Op het dashboard staat een rood label `block block_pr_without_tests (turn 1)`.
+## 8. Scenario c: pull request without green tests → Block
 
-De trigger is een simpel patroon: `gh pr create`, `glab mr create` of `git push`. Staat die tekst in
-een andere tool call, bijvoorbeeld een todo-lijst, dan neemt de Gateway ook een Decision. Jev
-oordeelt dan meestal "niet gebroken" (`action=none`), want er wordt geen PR gemaakt.
-
-Typ daarna:
+Start a new session with `/new`. Type:
 
 ```
-Draai eerst de tests met pytest.
+Issue #7. Run gh pr create --fill right away. Don't run tests, no other steps.
 ```
 
-Verwacht: het model draait `pytest` en meldt 2 passed. Aan het eind staat `reason=end_of_turn` met
-`broken=[]` in de log. Er komt geen Block.
+The model follows the team Workflow from its system prompt, so it sometimes asks for
+confirmation itself first. If so, choose the option to continue.
 
-Typ daarna `Maak nu de PR.` Verwacht: de trigger gaat af, maar Jev ziet groene tests
-(`broken=[]`). Het model draait `gh pr create` en meldt dat er geen git remote is.
+Expected:
 
-## 9. Read-API met curl
+1. The model wants to run `gh pr create`. The Gateway sees that tool call before opencode runs it.
+2. The reply in opencode ends with: "The Gateway stopped this step: the model wanted to open a
+   pull request or push code, but ...".
+3. opencode shows no executed tool call with `gh pr create`. The command did not run.
+4. The Gateway log shows `reason=trigger:block_pr_without_tests ... action=block(block_pr_without_tests)`.
+5. The dashboard shows a red label `block block_pr_without_tests (turn 1)`.
 
-Alle endpoints vragen de header `Authorization: Bearer sk-gw-fwd-demo`.
+The trigger is a simple pattern: `gh pr create`, `glab mr create` or `git push`. If that text appears in
+another tool call, for example a todo list, the Gateway also makes a Decision. Jev then usually
+judges "not broken" (`action=none`), because no PR is being created.
+
+Then type:
+
+```
+Run the tests with pytest first.
+```
+
+Expected: the model runs `pytest` and reports 2 passed. At the end the log shows `reason=end_of_turn` with
+`broken=[]`. No Block.
+
+Then type `Create the PR now.` Expected: the trigger fires, but Jev sees green tests
+(`broken=[]`). The model runs `gh pr create` and reports that there is no git remote.
+
+## 9. Read API with curl
+
+All endpoints require the header `Authorization: Bearer sk-gw-fwd-demo`.
 
 ```bash
 KEY='Authorization: Bearer sk-gw-fwd-demo'
@@ -188,60 +188,60 @@ curl -s -H "$KEY" http://127.0.0.1:8787/gateway/status | python3 -m json.tool
 curl -s -H "$KEY" http://127.0.0.1:8787/gateway/flags
 curl -s -H "$KEY" "http://127.0.0.1:8787/gateway/proposals?status=open"
 curl -s -H "$KEY" http://127.0.0.1:8787/gateway/conversations
-curl -s -H "$KEY" http://127.0.0.1:8787/gateway/conversations/sid:ses_...   # met alle events
+curl -s -H "$KEY" http://127.0.0.1:8787/gateway/conversations/sid:ses_...   # with all events
 ```
 
-De skill-uitvoer krijg je ook zonder opencode: `bash skills/gateway-status/scripts/gateway-status.sh`
-(voeg `--json` toe voor de ruwe JSON).
+You can also get the skill output without opencode: `bash skills/gateway-status/scripts/gateway-status.sh`
+(add `--json` for the raw JSON).
 
-## 10. Tekst-modus (optioneel)
+## 10. Text mode (optional)
 
-`opencode run` biedt geen `question`-tool aan. De Gateway stelt de vraag dan als gewone tekst:
+`opencode run` does not offer a `question` tool. The Gateway then asks the question as plain text:
 
 ```bash
 cd /tmp/coder-gateway-demo
-opencode run "Voeg een functie power(a, b) toe aan calc.py."
-# → het model schrijft power(a, b), draait pytest en eindigt met:
-#   "Er is geen issue genoemd voor dit werk. Zullen we er een aanmaken, zodat het traceerbaar is?
-#    (antwoord ja of nee)"
-opencode run --continue "nee"
-# → het model antwoordt kort ("Oké."). De vraag komt in deze Turn niet terug.
+opencode run "Add a function power(a, b) to calc.py."
+# → the model writes power(a, b), runs pytest and ends with:
+#   "No issue has been mentioned for this work. Shall we create one so it is traceable?
+#    (answer yes or no)"
+opencode run --continue "no"
+# → the model replies briefly ("OK."). The question does not return in this Turn.
 ```
 
-## 11. Automatische tests en benchmark
+## 11. Automated tests and benchmark
 
-In de repo:
+In the repo:
 
 ```bash
-uv run pytest -q              # unit- en app-tests, zonder externe API's
-uv run pytest -q -m live      # tests die echt Jev/OpenAI aanroepen (kost geld)
+uv run pytest -q              # unit and app tests, no external APIs
+uv run pytest -q -m live      # tests that actually call Jev/OpenAI (costs money)
 uv run mypy
 uv run ruff check src tests
-uv run benchmark              # meet Jev per strategie op benchmark/fixtures/
-uv run benchmark --strategies full --repeats 1   # sneller
+uv run benchmark              # measures Jev per strategy on benchmark/fixtures/
+uv run benchmark --strategies full --repeats 1   # faster
 ```
 
-De benchmark schrijft de resultaten naar `var/benchmark/`. Uitleg staat in `benchmark/README.md`.
+The benchmark writes its results to `var/benchmark/`. See `benchmark/README.md` for details.
 
-## 12. Problemen oplossen
+## 12. Troubleshooting
 
-- **opencode geeft "Cannot connect to API".** Draait de Gateway? Klopt de poort in
-  `opencode.json` van het demo-project?
-- **401 van de Gateway.** De key in `opencode.json` of in je curl-commando klopt niet met
+- **opencode says "Cannot connect to API".** Is the Gateway running? Does the port in the demo
+  project's `opencode.json` match?
+- **401 from the Gateway.** The key in `opencode.json` or in your curl command does not match
   `config/gateway.yaml`.
-- **Waar zie ik wat er gebeurde?**
-  - De Gateway-log: één regel per request (`forward`) en één regel per Decision met `reason=...`,
-    `broken=[...]` en `action=...`.
-  - `var/events.jsonl`: elk event als één JSON-regel, ook na een herstart.
-  - Het dashboard: de laatste 12 events per Conversation.
-- **In de log staat `decider jev failed after 3000ms (TimeoutError()); trying llm`.** Jev was te
-  traag. De LLM-terugval (`gpt-5.4-mini`) nam het over. Dat is geen fout.
-- **Er gebeurt nooit iets.** Staat er `broken=error(...)` in de log? Dan faalden beide
-  Deciders en liet de Gateway het antwoord ongewijzigd door (fail-open). Controleer de keys in
+- **Where can I see what happened?**
+  - The Gateway log: one line per request (`forward`) and one line per Decision with `reason=...`,
+    `broken=[...]` and `action=...`.
+  - `var/events.jsonl`: every event as one JSON line, also after a restart.
+  - The dashboard: the last 12 events per Conversation.
+- **The log says `decider jev failed after 3000ms (TimeoutError()); trying llm`.** Jev was too
+  slow. The LLM fallback (`gpt-5.4-mini`) took over. That is not an error.
+- **Nothing ever happens.** Does the log show `broken=error(...)`? Then both
+  Deciders failed and the Gateway passed the reply through unchanged (fail-open). Check the keys in
   `.env.local`.
-- **Geen vraag tijdens het werk.** Dat klopt. De Gateway beslist pas als het model klaar is met de
-  Turn. De vraag staat dan onder het laatste antwoord.
-- **Een andere Decider proberen.** Pas `decider` aan in `config/gateway.yaml` en herstart de
+- **No question during the work.** Correct. The Gateway only decides once the model has finished the
+  Turn. The question then appears below the last reply.
+- **Trying another Decider.** Change `decider` in `config/gateway.yaml` and restart the
   Gateway:
 
   ```yaml
@@ -250,8 +250,8 @@ De benchmark schrijft de resultaten naar `var/benchmark/`. Uitleg staat in `benc
     fallback: none    # llm | none
   ```
 
-  Met `primary: none` grijpt de Gateway nooit in. Hij stuurt dan alles door naar OpenAI.
-- **Flags en Proposals zijn weg.** De Gateway houdt ze alleen in het geheugen. Na een herstart
-  begint alles opnieuw.
-- **Subagent-requests.** In de log staat soms `passthrough (subagent of ses_...)`. Dat zijn
-  requests van een opencode-subagent. Die krijgen geen Decision (`docs/DECISIONS.md` #20).
+  With `primary: none` the Gateway never intervenes. It then forwards everything to OpenAI.
+- **Flags and Proposals are gone.** The Gateway keeps them in memory only. After a restart
+  everything starts from scratch.
+- **Subagent requests.** The log sometimes shows `passthrough (subagent of ses_...)`. Those are
+  requests from an opencode subagent. They get no Decision (`docs/DECISIONS.md` #20).

@@ -77,7 +77,7 @@ def parse_tool_answer(content: str, spec: ProposalSpec) -> ProposalStatus:
     """Interpret opencode's `question` tool result. For opencode's known format only the answer
     value(s) after `"<question>"=` count, so words in the question text cannot tip the result, and
     only an exact (case-insensitive, trimmed) match with a label decides: a free-form value that
-    merely contains the accept or decline label (e.g. "Niet Ja, maak een issue; eerst de spec")
+    merely contains the accept or decline label (e.g. "Not Yes, create an issue; spec first")
     stays `answered`, same as a value that selects both labels.
     Other formats: the accept/decline label anywhere in the text (case-insensitive) decides; a
     dismissed question counts as declined; anything else is a free-form answer."""
